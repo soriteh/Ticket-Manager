@@ -65,6 +65,9 @@ export default function App() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [mode, setMode] = useState<'signin'|'signup'>('signin')
+  const [fullName, setFullName] = useState('')
+  const [success, setSuccess] = useState('')
 
   if (!isNeonAuthConfigured) {
     return <main style={{minHeight:'100vh',display:'grid',placeItems:'center',padding:24,background:'#f4f7fb',fontFamily:'Inter,Arial,sans-serif'}}>
@@ -84,11 +87,19 @@ export default function App() {
     async function submit(e: React.FormEvent<HTMLFormElement>) {
       e.preventDefault()
       setError('')
+      setSuccess('')
       setBusy(true)
       try {
-        await authClient.signIn.email({ email, password })
+        if (mode === 'signup') {
+          const result = await authClient.signUp.email({ email, password, name: fullName })
+          if (result.error) throw new Error(result.error.message || 'Création du compte impossible.')
+          setSuccess('Demande de création envoyée. Si une vérification e-mail est demandée, consultez votre boîte de réception et les courriers indésirables.')
+        } else {
+          const result = await authClient.signIn.email({ email, password })
+          if (result.error) throw new Error(result.error.message || 'Connexion impossible. Vérifiez vos identifiants.')
+        }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Connexion impossible. Vérifiez vos identifiants.')
+        setError(err instanceof Error ? err.message : 'Opération impossible. Vérifiez les informations saisies.')
       } finally {
         setBusy(false)
       }
@@ -98,16 +109,19 @@ export default function App() {
       <form onSubmit={submit} style={{width:'100%',maxWidth:420,boxSizing:'border-box',padding:32,background:'#fff',borderRadius:20,boxShadow:'0 20px 60px rgba(0,0,0,.2)'}}>
         <div style={{width:48,height:48,borderRadius:14,display:'grid',placeItems:'center',background:'#0057b9',color:'#fff',fontSize:24,fontWeight:800}}>T</div>
         <h1 style={{marginBottom:6,color:'#071a36'}}>Ticket Manager</h1>
-        <p style={{marginTop:0,marginBottom:24,color:'#64748b'}}>Connectez-vous à votre espace de gestion.</p>
+        <p style={{marginTop:0,marginBottom:24,color:'#64748b'}}>{mode === 'signup' ? 'Créez votre compte d’accès.' : 'Connectez-vous à votre espace de gestion.'}</p>
+        {mode === 'signup' && <label style={{display:'block',fontWeight:600,marginBottom:14,color:'#243247'}}>Nom complet<input required value={fullName} onChange={e=>setFullName(e.target.value)} style={{display:'block',width:'100%',boxSizing:'border-box',padding:12,marginTop:7,border:'1px solid #d7dfeb',borderRadius:9}}/></label>}
         <label style={{display:'block',fontWeight:600,marginBottom:14,color:'#243247'}}>Adresse e-mail
           <input type="email" required autoComplete="username" value={email} onChange={e=>setEmail(e.target.value)} style={{display:'block',width:'100%',boxSizing:'border-box',padding:12,marginTop:7,border:'1px solid #d7dfeb',borderRadius:9}}/>
         </label>
         <label style={{display:'block',fontWeight:600,marginBottom:16,color:'#243247'}}>Mot de passe
-          <input type="password" required autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} style={{display:'block',width:'100%',boxSizing:'border-box',padding:12,marginTop:7,border:'1px solid #d7dfeb',borderRadius:9}}/>
+          <input type="password" required minLength={8} autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} value={password} onChange={e=>setPassword(e.target.value)} style={{display:'block',width:'100%',boxSizing:'border-box',padding:12,marginTop:7,border:'1px solid #d7dfeb',borderRadius:9}}/>
         </label>
         {error && <p role="alert" style={{color:'#b42318',fontSize:13}}>{error}</p>}
-        <button disabled={busy} style={{width:'100%',padding:13,border:0,borderRadius:9,background:'#0057b9',color:'#fff',fontWeight:700,cursor:busy?'wait':'pointer'}}>{busy?'Connexion…':'Se connecter'}</button>
-        <p style={{marginBottom:0,marginTop:18,fontSize:12,color:'#64748b'}}>Authentification sécurisée par Neon Auth.</p>
+        {success && <p role="status" style={{color:'#067647',fontSize:13}}>{success}</p>}
+        <button disabled={busy} style={{width:'100%',padding:13,border:0,borderRadius:9,background:'#0057b9',color:'#fff',fontWeight:700,cursor:busy?'wait':'pointer'}}>{busy?(mode === 'signup'?'Création…':'Connexion…'):(mode === 'signup'?'Créer mon compte':'Se connecter')}</button>
+        <button type="button" onClick={()=>{setMode(mode === 'signin'?'signup':'signin');setError('');setSuccess('')}} style={{width:'100%',marginTop:12,padding:10,border:0,background:'transparent',color:'#0057b9',fontWeight:600,cursor:'pointer'}}>{mode === 'signin'?'Créer un nouveau compte':'J’ai déjà un compte'}</button>
+        <p style={{marginBottom:0,marginTop:8,fontSize:12,color:'#64748b'}}>Authentification sécurisée par Neon Auth.</p>
       </form>
     </main>
   }
