@@ -68,9 +68,7 @@ export default function App() {
   const [mode, setMode] = useState<'signin'|'signup'>('signin')
   const [fullName, setFullName] = useState('')
   const [success, setSuccess] = useState('')
-  const [mode, setMode] = useState<'signin'|'signup'>('signin')
-  const [fullName, setFullName] = useState('')
-  const [success, setSuccess] = useState('')
+  const [verificationPending, setVerificationPending] = useState(false)
 
   if (!isNeonAuthConfigured) {
     return <main style={{minHeight:'100vh',display:'grid',placeItems:'center',padding:24,background:'#f4f7fb',fontFamily:'Inter,Arial,sans-serif'}}>
@@ -86,6 +84,19 @@ export default function App() {
     return <main style={{minHeight:'100vh',display:'grid',placeItems:'center',fontFamily:'Inter,Arial,sans-serif'}}>Vérification de votre session sécurisée…</main>
   }
 
+  if (verificationPending) {
+    return <main style={{minHeight:'100vh',display:'grid',placeItems:'center',padding:24,background:'linear-gradient(135deg,#071a36,#0b3970)',fontFamily:'Inter,Arial,sans-serif'}}>
+      <section style={{width:'100%',maxWidth:460,boxSizing:'border-box',padding:36,background:'#fff',borderRadius:20,boxShadow:'0 20px 60px rgba(0,0,0,.2)',textAlign:'center'}}>
+        <div style={{width:64,height:64,borderRadius:20,display:'grid',placeItems:'center',margin:'0 auto 18px',background:'#e8f1ff',color:'#0057b9',fontSize:30}}>✉</div>
+        <h1 style={{marginBottom:10,color:'#071a36'}}>Vérifiez votre adresse e-mail</h1>
+        <p style={{color:'#475569',lineHeight:1.65}}>Votre demande d’inscription a été acceptée. Consultez la boîte de réception de <strong>{email}</strong>, ainsi que le dossier des courriers indésirables, pour rechercher le message de vérification envoyé par Ticket Manager.</p>
+        <p style={{fontSize:13,color:'#64748b',lineHeight:1.6}}>Ouvrez le lien de vérification contenu dans le message pour confirmer votre adresse. Si aucun message n’arrive, l’envoi de vérification doit être activé et configuré dans Neon Auth.</p>
+        <button onClick={()=>{setVerificationPending(false);setMode('signin');setPassword('');setError('')}} style={{width:'100%',padding:13,border:0,borderRadius:9,background:'#0057b9',color:'#fff',fontWeight:700,cursor:'pointer'}}>Retour à la connexion</button>
+        <button onClick={()=>{setVerificationPending(false);setMode('signup');setError('')}} style={{width:'100%',marginTop:10,padding:10,border:0,background:'transparent',color:'#0057b9',fontWeight:600,cursor:'pointer'}}>Revenir à l’inscription</button>
+      </section>
+    </main>
+  }
+
   if (!session.data) {
     async function submit(e: React.FormEvent<HTMLFormElement>) {
       e.preventDefault()
@@ -96,7 +107,7 @@ export default function App() {
         if (mode === 'signup') {
           const result = await authClient.signUp.email({ email, password, name: fullName })
           if (result.error) throw new Error(result.error.message || 'Création du compte impossible.')
-          setSuccess('Demande de création envoyée. Si une vérification e-mail est demandée, consultez votre boîte de réception et les courriers indésirables.')
+          setVerificationPending(true)
         } else {
           const result = await authClient.signIn.email({ email, password })
           if (result.error) throw new Error(result.error.message || 'Connexion impossible. Vérifiez vos identifiants.')
