@@ -68,6 +68,9 @@ export default function App() {
   const [mode, setMode] = useState<'signin'|'signup'>('signin')
   const [fullName, setFullName] = useState('')
   const [success, setSuccess] = useState('')
+  const [mode, setMode] = useState<'signin'|'signup'>('signin')
+  const [fullName, setFullName] = useState('')
+  const [success, setSuccess] = useState('')
 
   if (!isNeonAuthConfigured) {
     return <main style={{minHeight:'100vh',display:'grid',placeItems:'center',padding:24,background:'#f4f7fb',fontFamily:'Inter,Arial,sans-serif'}}>
