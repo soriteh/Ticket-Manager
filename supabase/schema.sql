@@ -46,7 +46,7 @@ create table if not exists public.distributions (
   reference text not null unique,
   seller_id uuid not null references public.sellers(id),
   distributed_at timestamptz not null default now(),
-  status text not null default 'validated' check (status in ('draft','validated','cancelled')),
+  status text not null default 'draft' check (status in ('draft','validated','cancelled')),
   notes text,
   created_by uuid references public.profiles(id),
   created_at timestamptz not null default now()
