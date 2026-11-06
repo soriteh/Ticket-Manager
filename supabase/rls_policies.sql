@@ -6,7 +6,7 @@ create or replace function public.tm_is_admin()
 returns boolean
 language sql
 stable
-security invoker
+security definer
 set search_path = ''
 as $$
   select exists (
@@ -21,7 +21,7 @@ create or replace function public.tm_is_manager()
 returns boolean
 language sql
 stable
-security invoker
+security definer
 set search_path = ''
 as $$
   select exists (
@@ -36,7 +36,7 @@ create or replace function public.tm_is_cashier()
 returns boolean
 language sql
 stable
-security invoker
+security definer
 set search_path = ''
 as $$
   select exists (
@@ -52,7 +52,7 @@ create or replace function public.tm_owns_seller(target_seller uuid)
 returns boolean
 language sql
 stable
-security invoker
+security definer
 set search_path = ''
 as $$
   select exists (
@@ -61,17 +61,29 @@ as $$
   );
 $$;
 
--- Profils : chaque utilisateur voit son profil ; l'administration voit l'ensemble.
+-- Helpers SECURITY DEFINER limités à la vérification du rôle du compte courant ou de son lien vendeur.
+-- Ils ne retournent aucune donnée et l'exécution est réservée aux utilisateurs authentifiés.
+revoke all on function public.tm_is_admin() from public, anon;
+revoke all on function public.tm_is_manager() from public, anon;
+revoke all on function public.tm_is_cashier() from public, anon;
+revoke all on function public.tm_owns_seller(uuid) from public, anon;
+grant execute on function public.tm_is_admin() to authenticated;
+grant execute on function public.tm_is_manager() to authenticated;
+grant execute on function public.tm_is_cashier() to authenticated;
+grant execute on function public.tm_owns_seller(uuid) to authenticated;
+
+-- Profils : chaque utilisateur voit son profil ; seul l'administrateur modifie les profils.
 drop policy if exists profiles_select_self_or_admin on public.profiles;
 create policy profiles_select_self_or_admin on public.profiles
 for select to authenticated
 using (id = (select auth.uid()) or (select public.tm_is_admin()));
 
 drop policy if exists profiles_update_self_or_admin on public.profiles;
-create policy profiles_update_self_or_admin on public.profiles
+drop policy if exists profiles_update_admin on public.profiles;
+create policy profiles_update_admin on public.profiles
 for update to authenticated
-using (id = (select auth.uid()) or (select public.tm_is_admin()))
-with check (id = (select auth.uid()) or (select public.tm_is_admin()));
+using ((select public.tm_is_admin()))
+with check ((select public.tm_is_admin()));
 
 -- Vendeurs : vendeur limité à sa fiche ; équipe de gestion accès global.
 drop policy if exists sellers_select_scoped on public.sellers;
@@ -160,11 +172,11 @@ using ((select public.tm_is_manager()) or (select public.tm_owns_seller(seller_i
 drop policy if exists sales_insert_owner_or_manager on public.sales;
 create policy sales_insert_owner_or_manager on public.sales
 for insert to authenticated
-with check ((select public.tm_is_admin()) or
+with check (status='draft' and ((select public.tm_is_admin()) or
   (select public.tm_owns_seller(seller_id)) or exists (
     select 1 from public.profiles p where p.id=(select auth.uid())
     and p.is_active and p.role='sales_manager'
-  ));
+  )));
 drop policy if exists sales_update_admin on public.sales;
 create policy sales_update_admin on public.sales
 for update to authenticated
