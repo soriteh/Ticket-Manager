@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { authClient, isNeonAuthConfigured } from './lib/auth-client'
 import { LayoutDashboard, Users, Package, Ticket, Wallet, ChartNoAxesCombined, Settings, Search, Bell, Plus, ArrowUpRight, ArrowDownRight, MoreHorizontal, CalendarDays, ChevronDown, Menu, X, CircleDollarSign, ClipboardList, LogOut } from 'lucide-react'
 
 type Seller = { id:number; name:string; phone:string; rate:number; distributed:number; sold:number; revenue:number; paid:number }
@@ -15,17 +16,17 @@ const nav: {id:Tab;label:string;icon:typeof LayoutDashboard}[] = [
   {id:'commissions',label:'Commissions',icon:Wallet},{id:'remittances',label:'Reversements',icon:CircleDollarSign},
   {id:'reports',label:'Rapports',icon:ChartNoAxesCombined},{id:'settings',label:'Paramètres',icon:Settings},
 ]
-export default function App(){
+function Dashboard(){
  const [tab,setTab]=useState<Tab>('dashboard'); const [sellers,setSellers]=useState(initial)
  const [query,setQuery]=useState(''); const [modal,setModal]=useState(false); const [mobile,setMobile]=useState(false)
  const [form,setForm]=useState({name:'',phone:'',rate:'10'})
- const [notice,setNotice]=useState('Données de démonstration — connectez Supabase pour activer la sauvegarde centralisée.')
+ const [notice,setNotice]=useState('Données de démonstration — la connexion Neon est activée, le raccordement des opérations est en cours.')
  const totalRevenue=sellers.reduce((a,s)=>a+s.revenue,0), totalCommission=sellers.reduce((a,s)=>a+s.revenue*s.rate/100,0)
  const totalDue=sellers.reduce((a,s)=>a+s.revenue*(1-s.rate/100)-s.paid,0)
  const totalDistributed=sellers.reduce((a,s)=>a+s.distributed,0), totalSold=sellers.reduce((a,s)=>a+s.sold,0)
  const filtered=useMemo(()=>sellers.filter(s=>s.name.toLowerCase().includes(query.toLowerCase())||s.phone.includes(query)),[sellers,query])
  const title=nav.find(n=>n.id===tab)?.label||'Ticket Manager'
- function addSeller(e:React.FormEvent){e.preventDefault(); if(!form.name.trim())return;setSellers([...sellers,{id:Date.now(),name:form.name,phone:form.phone,rate:Number(form.rate),distributed:0,sold:0,revenue:0,paid:0}]);setForm({name:'',phone:'',rate:'10'});setModal(false);setNotice('Vendeur ajouté à la démonstration. Configurez Supabase pour enregistrer les données durablement.')}
+ function addSeller(e:React.FormEvent){e.preventDefault(); if(!form.name.trim())return;setSellers([...sellers,{id:Date.now(),name:form.name,phone:form.phone,rate:Number(form.rate),distributed:0,sold:0,revenue:0,paid:0}]);setForm({name:'',phone:'',rate:'10'});setModal(false);setNotice('Vendeur ajouté à la démonstration. Le raccordement Neon des données sera activé dans la prochaine étape.')}
  return <div className="app-shell">
   <aside className={mobile?'sidebar open':'sidebar'}><div className="brand"><div className="brand-mark">T</div><div><b>Ticket Manager</b><small>GESTION COMMERCIALE</small></div><button className="mobile-close" onClick={()=>setMobile(false)}><X size={18}/></button></div>
    <div className="workspace"><span className="workspace-dot"/><div><b>Espace administration</b><small>Environnement de travail</small></div><ChevronDown size={15}/></div>
@@ -33,7 +34,7 @@ export default function App(){
    <div className="sidebar-bottom"><div className="help-card"><div className="help-icon">?</div><b>Besoin d’aide ?</b><p>Consultez le guide d’utilisation de Ticket Manager.</p><button onClick={()=>setNotice('Le centre d’aide sera disponible dans une prochaine version.')}>Centre d’aide <ArrowUpRight size={14}/></button></div><div className="profile"><div className="avatar">SA</div><div><b>Super Administrateur</b><small>Administrateur</small></div><MoreHorizontal size={18}/></div></div>
   </aside>
   {mobile&&<div className="scrim" onClick={()=>setMobile(false)}/>}
-  <main className="main"><header className="topbar"><div className="top-left"><button className="menu-btn" onClick={()=>setMobile(true)}><Menu/></button><div><span className="crumb">Espace de gestion</span><h1>{title}</h1></div></div><div className="top-actions"><div className="date-pill"><CalendarDays size={16}/> 06 novembre 2026</div><button className="icon-btn" aria-label="Notifications" onClick={()=>setNotice('Aucune nouvelle notification.')}><Bell size={19}/></button><div className="top-avatar">SA</div></div></header>
+  <main className="main"><header className="topbar"><div className="top-left"><button className="menu-btn" onClick={()=>setMobile(true)}><Menu/></button><div><span className="crumb">Espace de gestion</span><h1>{title}</h1></div></div><div className="top-actions"><div className="date-pill"><CalendarDays size={16}/> 06 novembre 2026</div><button className="icon-btn" aria-label="Notifications" onClick={()=>setNotice('Aucune nouvelle notification.')}><Bell size={19}/></button><button className="icon-btn" aria-label="Déconnexion" title="Déconnexion" onClick={()=>void authClient.signOut()}><LogOut size={18}/></button><div className="top-avatar">SA</div></div></header>
    <div className="content"><div className="notice"><span className="notice-dot"/>{notice}<button onClick={()=>setNotice('Données de démonstration — connectez Supabase pour activer la sauvegarde centralisée.')}>×</button></div>
    {tab==='dashboard'&&<><div className="welcome"><div><p className="eyebrow">TABLEAU DE BORD</p><h2>Bonjour, Administrateur <span>👋</span></h2><p>Voici le résumé de votre activité commerciale.</p></div><button className="btn-primary" onClick={()=>{setTab('distributions');setNotice('Enregistrez les quantités distribuées dans le module Distributions.')}}><Plus size={17}/> Nouvelle distribution</button></div>
     <div className="stats-grid"><Stat icon={<Users/>} label="Vendeurs actifs" value={String(sellers.length)} change="Comptes enregistrés" tone="blue"/><Stat icon={<Ticket/>} label="Tickets distribués" value={money(totalDistributed).replace(' GNF','')} change="Quantité cumulée" tone="orange"/><Stat icon={<ChartNoAxesCombined/>} label="Chiffre d’affaires" value={money(totalRevenue)} change="Ventes déclarées" tone="green"/><Stat icon={<Wallet/>} label="Commissions acquises" value={money(totalCommission)} change="Calculées selon les taux" tone="purple"/></div>
@@ -45,9 +46,9 @@ export default function App(){
    {tab==='distributions'&&<ModulePanel title="Distributions" desc="Enregistrez les quantités remises à chaque vendeur, selon les besoins." icon={<Package/>} items={['Date et référence de distribution','Vendeur bénéficiaire','Type de ticket et quantité','Prix unitaire de référence','Bon de distribution imprimable']} action="Nouvelle distribution" onAction={()=>setNotice('Le formulaire de distribution sera connecté à la base Supabase dans la prochaine étape.')}/>}
    {tab==='sales'&&<ModulePanel title="Déclarations des ventes" desc="Enregistrez les quantités vendues et calculez automatiquement les invendus." icon={<Ticket/>} items={['Vendeur et période de déclaration','Quantités vendues par type','Prix appliqué au moment de la vente','Calcul automatique des invendus','Validation et historique des déclarations']} action="Déclarer des ventes" onAction={()=>setNotice('Le formulaire de déclaration sera connecté à la base Supabase dans la prochaine étape.')}/>}
    {tab==='commissions'&&<><div className="welcome"><div><p className="eyebrow">RÉMUNÉRATION</p><h2>Commissions des vendeurs</h2><p>Calcul des commissions selon le chiffre d’affaires validé et le taux individuel.</p></div></div><div className="stats-grid"><Stat icon={<Wallet/>} label="Commissions acquises" value={money(totalCommission)} change="Tous les vendeurs" tone="purple"/><Stat icon={<Users/>} label="Taux moyen indicatif" value={(sellers.reduce((a,s)=>a+s.rate,0)/Math.max(1,sellers.length)).toFixed(1)+' %'} change="Moyenne des taux" tone="blue"/></div><section className="panel table-panel"><SellerTable sellers={sellers}/></section></>}
-   {tab==='remittances'&&<ModulePanel title="Reversements" desc="Suivez les montants dus, les paiements partiels et les soldes par vendeur." icon={<Wallet/>} items={sellers.map(s=>s.name+' — solde : '+money(s.revenue*(1-s.rate/100)-s.paid))} action="Enregistrer un reversement" onAction={()=>setNotice('Le formulaire sécurisé de reversement sera connecté à Supabase.')}/>}
+   {tab==='remittances'&&<ModulePanel title="Reversements" desc="Suivez les montants dus, les paiements partiels et les soldes par vendeur." icon={<Wallet/>} items={sellers.map(s=>s.name+' — solde : '+money(s.revenue*(1-s.rate/100)-s.paid))} action="Enregistrer un reversement" onAction={()=>setNotice('Le formulaire sécurisé de reversement sera connecté à Neon.')}/>}
    {tab==='reports'&&<ModulePanel title="Rapports et états" desc="Consultez les performances et les états financiers par période et par vendeur." icon={<ChartNoAxesCombined/>} items={['Rapport des distributions','Rapport des ventes et invendus','État des commissions','État des reversements et soldes','Export PDF et Excel']} action="Préparer un rapport" onAction={()=>setNotice('Les exports seront activés après raccordement des données réelles.')}/>}
-   {tab==='settings'&&<ModulePanel title="Paramètres" desc="Configuration générale de l’application et des règles commerciales." icon={<Settings/>} items={['Devise principale : GNF','Tarifs variables par type de ticket','Taux de commission en pourcentage','Gestion des utilisateurs et permissions','Historique des modifications']} action="Configurer l’application" onAction={()=>setNotice('Les paramètres seront persistés dans Supabase après configuration du projet.')}/>}
+   {tab==='settings'&&<ModulePanel title="Paramètres" desc="Configuration générale de l’application et des règles commerciales." icon={<Settings/>} items={['Devise principale : GNF','Tarifs variables par type de ticket','Taux de commission en pourcentage','Gestion des utilisateurs et permissions','Historique des modifications']} action="Configurer l’application" onAction={()=>setNotice('Les paramètres seront persistés dans Supabase après configuration de Neon.')}/>}
    <footer>© 2026 Ticket Manager <span>Gestion des tickets physiques & commissions</span></footer></div>
   </main>
   {modal&&<div className="modal-backdrop"><form className="modal" onSubmit={addSeller}><div className="modal-head"><div><h3>Ajouter un vendeur</h3><p>Renseignez les informations du nouveau vendeur.</p></div><button type="button" className="icon-btn" onClick={()=>setModal(false)}><X/></button></div><label>Nom complet<input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Nom et prénom"/></label><label>Téléphone<input value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})} placeholder="6XX XX XX XX"/></label><label>Taux de commission (%)<input required type="number" min="0" max="100" step="0.01" value={form.rate} onChange={e=>setForm({...form,rate:e.target.value})}/></label><div className="modal-actions"><button type="button" className="btn-outline" onClick={()=>setModal(false)}>Annuler</button><button className="btn-primary">Enregistrer le vendeur</button></div></form></div>}
@@ -56,3 +57,60 @@ export default function App(){
 function Stat({icon,label,value,change,tone}:{icon:React.ReactNode;label:string;value:string;change:string;tone:string}){return <div className="stat-card"><div className={'stat-icon '+tone}>{icon}</div><span>{label}</span><strong>{value}</strong><small>{change}</small></div>}
 function SellerTable({sellers}:{sellers:Seller[]}){return <div className="table-wrap"><table><thead><tr><th>VENDEUR</th><th>DISTRIBUÉS</th><th>VENDUS</th><th>CHIFFRE D’AFFAIRES</th><th>COMMISSION</th><th>À REVERSER</th></tr></thead><tbody>{sellers.map(s=><tr key={s.id}><td><div className="seller-cell"><div className="avatar">{s.name.split(' ').map(x=>x[0]).slice(0,2).join('')}</div><div><b>{s.name}</b><small>{s.phone}</small></div></div></td><td>{s.distributed}</td><td>{s.sold}</td><td>{money(s.revenue)}</td><td><span className="rate-pill">{s.rate}%</span> {money(s.revenue*s.rate/100)}</td><td className="amount-due">{money(s.revenue*(1-s.rate/100)-s.paid)}</td></tr>)}</tbody></table>{sellers.length===0&&<div className="empty">Aucun vendeur trouvé.</div>}</div>}
 function ModulePanel({title,desc,icon,items,action,onAction}:{title:string;desc:string;icon:React.ReactNode;items:string[];action:string;onAction:()=>void}){return <><div className="welcome"><div><p className="eyebrow">GESTION OPÉRATIONNELLE</p><h2>{title}</h2><p>{desc}</p></div><button className="btn-primary" onClick={onAction}><Plus size={17}/>{action}</button></div><section className="panel module-panel"><div className="module-icon">{icon}</div><h3>{title}</h3><p>{desc}</p><div className="module-list">{items.map((x,i)=><div key={i}><span className="check">✓</span>{x}</div>)}</div><div className="coming-soon">Module préparé — raccordement aux opérations et à la base de données à réaliser.</div></section></>}
+
+
+export default function App() {
+  const session = authClient.useSession()
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  if (!isNeonAuthConfigured) {
+    return <main style={{minHeight:'100vh',display:'grid',placeItems:'center',padding:24,background:'#f4f7fb',fontFamily:'Inter,Arial,sans-serif'}}>
+      <section style={{maxWidth:520,padding:32,background:'#fff',borderRadius:18,boxShadow:'0 12px 40px rgba(10,30,60,.08)'}}>
+        <h1 style={{marginTop:0}}>Configuration de Ticket Manager</h1>
+        <p>Neon Auth n’est pas encore configuré dans les variables Vercel.</p>
+        <p>Ajoutez <code>VITE_NEON_AUTH_URL</code> dans les environnements Production et Preview, puis relancez le déploiement.</p>
+      </section>
+    </main>
+  }
+
+  if (session.isPending) {
+    return <main style={{minHeight:'100vh',display:'grid',placeItems:'center',fontFamily:'Inter,Arial,sans-serif'}}>Vérification de votre session sécurisée…</main>
+  }
+
+  if (!session.data) {
+    async function submit(e: React.FormEvent<HTMLFormElement>) {
+      e.preventDefault()
+      setError('')
+      setBusy(true)
+      try {
+        await authClient.signIn.email({ email, password })
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Connexion impossible. Vérifiez vos identifiants.')
+      } finally {
+        setBusy(false)
+      }
+    }
+
+    return <main style={{minHeight:'100vh',display:'grid',placeItems:'center',padding:24,background:'linear-gradient(135deg,#071a36,#0b3970)',fontFamily:'Inter,Arial,sans-serif'}}>
+      <form onSubmit={submit} style={{width:'100%',maxWidth:420,boxSizing:'border-box',padding:32,background:'#fff',borderRadius:20,boxShadow:'0 20px 60px rgba(0,0,0,.2)'}}>
+        <div style={{width:48,height:48,borderRadius:14,display:'grid',placeItems:'center',background:'#0057b9',color:'#fff',fontSize:24,fontWeight:800}}>T</div>
+        <h1 style={{marginBottom:6,color:'#071a36'}}>Ticket Manager</h1>
+        <p style={{marginTop:0,marginBottom:24,color:'#64748b'}}>Connectez-vous à votre espace de gestion.</p>
+        <label style={{display:'block',fontWeight:600,marginBottom:14,color:'#243247'}}>Adresse e-mail
+          <input type="email" required autoComplete="username" value={email} onChange={e=>setEmail(e.target.value)} style={{display:'block',width:'100%',boxSizing:'border-box',padding:12,marginTop:7,border:'1px solid #d7dfeb',borderRadius:9}}/>
+        </label>
+        <label style={{display:'block',fontWeight:600,marginBottom:16,color:'#243247'}}>Mot de passe
+          <input type="password" required autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} style={{display:'block',width:'100%',boxSizing:'border-box',padding:12,marginTop:7,border:'1px solid #d7dfeb',borderRadius:9}}/>
+        </label>
+        {error && <p role="alert" style={{color:'#b42318',fontSize:13}}>{error}</p>}
+        <button disabled={busy} style={{width:'100%',padding:13,border:0,borderRadius:9,background:'#0057b9',color:'#fff',fontWeight:700,cursor:busy?'wait':'pointer'}}>{busy?'Connexion…':'Se connecter'}</button>
+        <p style={{marginBottom:0,marginTop:18,fontSize:12,color:'#64748b'}}>Authentification sécurisée par Neon Auth.</p>
+      </form>
+    </main>
+  }
+
+  return <Dashboard />
+}
