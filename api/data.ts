@@ -14,7 +14,7 @@ type Res = {
 }
 
 const authBaseUrl = process.env.NEON_AUTH_BASE_URL || process.env.VITE_NEON_AUTH_URL
-const jwksUrl = process.env.NEON_AUTH_JWKS_URL || (authBaseUrl ? new URL('/jwks', authBaseUrl).toString() : '')
+const jwksUrl = process.env.NEON_AUTH_JWKS_URL || (authBaseUrl ? new URL('jwks', authBaseUrl.endsWith('/') ? authBaseUrl : authBaseUrl + '/').toString() : '')
 const jwks = jwksUrl ? createRemoteJWKSet(new URL(jwksUrl)) : null
 const resources = new Set(['sellers', 'suppliers', 'receipts', 'distributions', 'sales', 'remittances'])
 
@@ -159,7 +159,19 @@ export default async function handler(req: Req, res: Res) {
         const method = methods[requiredText('method')] || requiredText('method')
         if (!sellerId || !amount || !['cash','bank_transfer','mobile_money','other'].includes(method)) return fail(res, 400, 'Données de reversement invalides')
         const reference = requiredText('reference') || 'REV-' + crypto.randomUUID().slice(0, 8).toUpperCase()
-        const result = await sql`insert into public.remittances (reference, seller_id, amount, payment_method, transaction_reference, paid_at, received_by) values (${reference}, ${sellerId}::uuid, ${amount}, ${method}, ${requiredText('reference') || null}, ${date}::date, ${userId}::uuid) returning id`
+        const result = await sql`
+          with due as (
+            select greatest(0, coalesce(balance_to_remit,0)) as balance
+            from public.seller_financial_summary where seller_id=${sellerId}::uuid
+          ), inserted as (
+            insert into public.remittances (reference, seller_id, amount, payment_method, transaction_reference, paid_at, received_by)
+            select ${reference}, ${sellerId}::uuid, ${amount}, ${method}, ${requiredText('reference') || null}, ${date}::date, ${userId}::uuid
+            from due where balance >= ${amount}
+            returning id
+          )
+          select id from inserted
+        `
+        if (!result.length) return fail(res, 409, 'Reversement supérieur au solde dû ou vendeur sans solde disponible')
         return res.status(201).json({ ok: true, id: result[0].id })
       }
     }
