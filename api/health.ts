@@ -25,6 +25,8 @@ export default async function handler(
     const sql = neon(process.env.DATABASE_URL)
     const rows = await sql`
       select
+        current_database() as database_name,
+        current_schema() as schema_name,
         to_regclass('public.tm_profiles') is not null as profiles,
         to_regclass('public.sellers') is not null as sellers,
         to_regclass('public.suppliers') is not null as suppliers,
@@ -34,7 +36,7 @@ export default async function handler(
         to_regclass('public.remittances') is not null as remittances
     `
 
-    const schema = rows[0] as Record<string, boolean>
+    const schema = rows[0] as Record<string, string | boolean>
     const required = [
       'profiles',
       'sellers',
@@ -45,11 +47,16 @@ export default async function handler(
       'remittances',
     ]
     const missing = required.filter((table) => schema[table] !== true)
+    const databaseInfo = {
+      database_name: schema.database_name,
+      schema_name: schema.schema_name,
+    }
 
     if (missing.length > 0) {
       return res.status(503).json({
         ok: false,
         database: 'connected',
+        ...databaseInfo,
         schema: 'incomplete',
         missing,
       })
@@ -58,6 +65,7 @@ export default async function handler(
     return res.status(200).json({
       ok: true,
       database: 'connected',
+      ...databaseInfo,
       schema: 'ready',
     })
   } catch {
