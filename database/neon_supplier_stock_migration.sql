@@ -28,7 +28,7 @@ create table if not exists public.ticket_receipts (
   status text not null default 'validated'
     check (status in ('draft','validated','cancelled')),
   notes text,
-  created_by text references neon_auth."user"(id),
+  created_by uuid references neon_auth."user"(id),
   created_at timestamptz not null default now()
 );
 
