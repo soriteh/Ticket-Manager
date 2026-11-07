@@ -69,6 +69,8 @@ export default function App() {
   const [fullName, setFullName] = useState('')
   const [success, setSuccess] = useState('')
   const [verificationPending, setVerificationPending] = useState(false)
+  const [otp, setOtp] = useState('')
+  const [otpBusy, setOtpBusy] = useState(false)
 
   if (!isNeonAuthConfigured) {
     return <main style={{minHeight:'100vh',display:'grid',placeItems:'center',padding:24,background:'#f4f7fb',fontFamily:'Inter,Arial,sans-serif'}}>
@@ -85,15 +87,52 @@ export default function App() {
   }
 
   if (verificationPending) {
+    async function verifyCode(e: React.FormEvent<HTMLFormElement>) {
+      e.preventDefault()
+      setError('')
+      setOtpBusy(true)
+      try {
+        const client = authClient as any
+        const result = await client.emailOtp.verifyEmail({ email, otp: otp.trim() })
+        if (result?.error) throw new Error(result.error.message || 'Code incorrect ou expiré.')
+        setVerificationPending(false)
+        setPassword('')
+        setSuccess('Adresse e-mail vérifiée. Vous pouvez maintenant accéder à votre espace.')
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Vérification impossible. Vérifiez le code reçu.')
+      } finally {
+        setOtpBusy(false)
+      }
+    }
+    async function resendCode() {
+      setError('')
+      setSuccess('')
+      setOtpBusy(true)
+      try {
+        const client = authClient as any
+        const result = await client.emailOtp.sendVerificationOtp({ email, type: 'email-verification' })
+        if (result?.error) throw new Error(result.error.message || 'Impossible de renvoyer le code.')
+        setSuccess('Un nouveau code de vérification vient d’être demandé.')
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Impossible de renvoyer le code.')
+      } finally {
+        setOtpBusy(false)
+      }
+    }
     return <main style={{minHeight:'100vh',display:'grid',placeItems:'center',padding:24,background:'linear-gradient(135deg,#071a36,#0b3970)',fontFamily:'Inter,Arial,sans-serif'}}>
-      <section style={{width:'100%',maxWidth:460,boxSizing:'border-box',padding:36,background:'#fff',borderRadius:20,boxShadow:'0 20px 60px rgba(0,0,0,.2)',textAlign:'center'}}>
+      <form onSubmit={verifyCode} style={{width:'100%',maxWidth:460,boxSizing:'border-box',padding:36,background:'#fff',borderRadius:20,boxShadow:'0 20px 60px rgba(0,0,0,.2)',textAlign:'center'}}>
         <div style={{width:64,height:64,borderRadius:20,display:'grid',placeItems:'center',margin:'0 auto 18px',background:'#e8f1ff',color:'#0057b9',fontSize:30}}>✉</div>
-        <h1 style={{marginBottom:10,color:'#071a36'}}>Vérifiez votre adresse e-mail</h1>
-        <p style={{color:'#475569',lineHeight:1.65}}>Votre demande d’inscription a été acceptée. Consultez la boîte de réception de <strong>{email}</strong>, ainsi que le dossier des courriers indésirables, pour rechercher le message de vérification envoyé par Ticket Manager.</p>
-        <p style={{fontSize:13,color:'#64748b',lineHeight:1.6}}>Ouvrez le lien de vérification contenu dans le message pour confirmer votre adresse. Si aucun message n’arrive, l’envoi de vérification doit être activé et configuré dans Neon Auth.</p>
-        <button onClick={()=>{setVerificationPending(false);setMode('signin');setPassword('');setError('')}} style={{width:'100%',padding:13,border:0,borderRadius:9,background:'#0057b9',color:'#fff',fontWeight:700,cursor:'pointer'}}>Retour à la connexion</button>
-        <button onClick={()=>{setVerificationPending(false);setMode('signup');setError('')}} style={{width:'100%',marginTop:10,padding:10,border:0,background:'transparent',color:'#0057b9',fontWeight:600,cursor:'pointer'}}>Revenir à l’inscription</button>
-      </section>
+        <h1 style={{marginBottom:10,color:'#071a36'}}>Saisissez votre code</h1>
+        <p style={{color:'#475569',lineHeight:1.65}}>Un code de vérification a été envoyé à <strong>{email}</strong>. Consultez également vos courriers indésirables.</p>
+        <label style={{display:'block',textAlign:'left',fontWeight:600,color:'#243247',marginTop:22}}>Code de vérification
+          <input required inputMode="numeric" autoComplete="one-time-code" maxLength={8} value={otp} onChange={e=>setOtp(e.target.value.replace(/\\D/g,''))} placeholder="Entrez le code reçu" style={{display:'block',width:'100%',boxSizing:'border-box',padding:15,marginTop:8,border:'1px solid #cbd5e1',borderRadius:9,fontSize:22,letterSpacing:6,textAlign:'center'}}/>
+        </label>
+        {error && <p role="alert" style={{color:'#b42318',fontSize:13}}>{error}</p>}
+        {success && <p role="status" style={{color:'#067647',fontSize:13}}>{success}</p>}
+        <button disabled={otpBusy || !otp.trim()} style={{width:'100%',marginTop:18,padding:13,border:0,borderRadius:9,background:'#0057b9',color:'#fff',fontWeight:700,cursor:otpBusy?'wait':'pointer'}}>{otpBusy?'Vérification…':'Vérifier le code'}</button>
+        <button type="button" disabled={otpBusy} onClick={()=>void resendCode()} style={{width:'100%',marginTop:12,padding:10,border:0,background:'transparent',color:'#0057b9',fontWeight:600,cursor:'pointer'}}>Renvoyer le code</button>
+        <button type="button" onClick={()=>{setVerificationPending(false);setMode('signin');setOtp('');setPassword('');setError('');setSuccess('')}} style={{width:'100%',padding:10,border:0,background:'transparent',color:'#64748b',cursor:'pointer'}}>Retour à la connexion</button>
+      </form>
     </main>
   }
 
@@ -107,10 +146,10 @@ export default function App() {
         if (mode === 'signup') {
           const result = await authClient.signUp.email({ email, password, name: fullName })
           if (result.error) throw new Error(result.error.message || 'Création du compte impossible.')
-          setVerificationPending(true)
+          setOtp('')\n          setVerificationPending(true)
         } else {
           const result = await authClient.signIn.email({ email, password })
-          if (result.error) throw new Error(result.error.message || 'Connexion impossible. Vérifiez vos identifiants.')
+          if (result.error) {\n            const message = result.error.message || 'Connexion impossible. Vérifiez vos identifiants.'\n            if (/email.*(not|isn.t)\\s*verified|email.*verification/i.test(message)) {\n              const client = authClient as any\n              const sent = await client.emailOtp.sendVerificationOtp({ email, type: 'email-verification' })\n              if (sent?.error) throw new Error(sent.error.message || message)\n              setOtp('')\n              setVerificationPending(true)\n              return\n            }\n            throw new Error(message)\n          }
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Opération impossible. Vérifiez les informations saisies.')
