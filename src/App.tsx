@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { authClient, isNeonAuthConfigured } from './lib/auth-client'
 import { LayoutDashboard, Users, Package, Ticket, Wallet, ChartNoAxesCombined, Settings, Search, Bell, Plus, ArrowUpRight, MoreHorizontal, CalendarDays, ChevronDown, Menu, X, CircleDollarSign, LogOut, Download, FileText, CheckCircle2, AlertCircle, Truck } from 'lucide-react'
 
@@ -13,9 +13,26 @@ const money=(n:number)=>new Intl.NumberFormat('fr-FR').format(Math.round(n))+' G
 const nav:{id:Tab;label:string;icon:any}[]=[{id:'dashboard',label:'Vue d’ensemble',icon:LayoutDashboard},{id:'sellers',label:'Vendeurs',icon:Users},{id:'suppliers',label:'Fournisseurs',icon:Truck},{id:'receipts',label:'Réceptions de tickets',icon:Package},{id:'distributions',label:'Distributions',icon:Package},{id:'sales',label:'Ventes',icon:Ticket},{id:'commissions',label:'Commissions',icon:Wallet},{id:'remittances',label:'Reversements',icon:CircleDollarSign},{id:'reports',label:'Rapports',icon:ChartNoAxesCombined},{id:'settings',label:'Paramètres',icon:Settings}]
 const today=()=>new Date().toISOString().slice(0,10)
 
+async function dataApi(resource:string, method:'GET'|'POST'='GET', body?:Record<string,unknown>){
+ const auth=authClient as any
+ const tokenResult=await auth.token()
+ const token=tokenResult?.data?.token||tokenResult?.token
+ if(!token) throw new Error('Session Neon invalide. Reconnectez-vous.')
+ const response=await fetch('/api/data?resource='+encodeURIComponent(resource),{
+  method,
+  headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+  ...(body?{body:JSON.stringify(body)}:{})
+ })
+ const result=await response.json()
+ if(!response.ok||!result.ok) throw new Error(result.error||'Erreur API')
+ return result.data??result
+}
+
 function Dashboard(){
  const [tab,setTab]=useState<Tab>('dashboard'),[mobile,setMobile]=useState(false),[query,setQuery]=useState(''),[notice,setNotice]=useState('')
  const [sellers,setSellers]=useState<Seller[]>([]),[suppliers,setSuppliers]=useState<Supplier[]>([]),[receipts,setReceipts]=useState<Receipt[]>([]),[distributions,setDistributions]=useState<Distribution[]>([]),[sales,setSales]=useState<Sale[]>([]),[remittances,setRemittances]=useState<Remittance[]>([])
+ const [loadingData,setLoadingData]=useState(true)
+ useEffect(()=>{let alive=true;(async()=>{try{const [a,b,d,e,g,h]=await Promise.all([dataApi('sellers'),dataApi('suppliers'),dataApi('receipts'),dataApi('distributions'),dataApi('sales'),dataApi('remittances')]);if(!alive)return;setSellers(a);setSuppliers(b);setReceipts(d);setDistributions(e);setSales(g);setRemittances(h)}catch(err){if(alive)setNotice(err instanceof Error?err.message:'Chargement des données impossible')}finally{if(alive)setLoadingData(false)}})();return()=>{alive=false}},[])
  const [ticketName,setTicketName]=useState('Ticket standard'),[ticketPrice,setTicketPrice]=useState('5000'),[defaultRate,setDefaultRate]=useState('10'),[period,setPeriod]=useState(today().slice(0,7)),[pairRates,setPairRates]=useState<Record<string,string>>({})
  const [modal,setModal]=useState<Tab|null>(null),[editing,setEditing]=useState<string|null>(null)
  const [sellerForm,setSellerForm]=useState({name:'',phone:'',rate:'10'})
@@ -41,8 +58,8 @@ function Dashboard(){
  const monthlySupplierPairs=useMemo(()=>{const keys=new Set(monthlySales.map(x=>x.supplierId+'|'+x.sellerId));return [...keys].map(key=>{const [supplierId,sellerId]=key.split('|'),rows=monthlySales.filter(x=>x.supplierId===supplierId&&x.sellerId===sellerId),quantity=rows.reduce((a,x)=>a+x.quantity,0),revenue=rows.reduce((a,x)=>a+x.quantity*x.price,0),rawRate=pairRates[key],rate=rawRate===undefined||rawRate===''?null:Number(rawRate);return {key,supplierId,sellerId,quantity,revenue,rate,commission:rate===null?null:revenue*rate/100,net:rate===null?null:revenue-revenue*rate/100}})},[monthlySales,pairRates])
  const notify=(s:string)=>setNotice(s)
  function printReceipt(id:string){const item=receipts.find(x=>x.id===id);if(!item)return;const supplier=suppliers.find(x=>x.id===item.supplierId);const w=window.open('','_blank','width=800,height=650');if(!w){notify('Autorisez les fenêtres contextuelles pour imprimer le bon.');return}w.document.write('<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Bon de réception '+item.reference+'</title><style>body{font:14px Arial,sans-serif;color:#17243a;padding:36px}header{border-bottom:3px solid #0868b9;padding-bottom:18px;margin-bottom:28px}h1{font-size:24px;margin:0 0 6px}.muted{color:#64748b}table{width:100%;border-collapse:collapse;margin-top:24px}td,th{border:1px solid #dbe3ed;padding:13px;text-align:left}th{background:#f2f6fb}.sign{display:flex;justify-content:space-between;margin-top:90px}.sign div{width:40%;border-top:1px solid #64748b;padding-top:8px}</style></head><body><header><h1>BON DE RÉCEPTION DE TICKETS</h1><div class="muted">Ticket Manager · Approvisionnement</div></header><p><b>Référence :</b> '+item.reference+'</p><p><b>Date :</b> '+item.date+'</p><p><b>Fournisseur :</b> '+(supplier?.name||'Fournisseur')+'</p><table><tr><th>Désignation</th><th>Quantité reçue</th><th>Coût unitaire</th><th>Valeur totale</th></tr><tr><td>Tickets</td><td>'+item.quantity+'</td><td>'+money(item.unitCost)+'</td><td>'+money(item.quantity*item.unitCost)+'</td></tr></table><div class="sign"><div>Réceptionnaire</div><div>Signature du fournisseur</div></div><script>window.onload=()=>window.print()<\\/script></body></html>');w.document.close()}
- function saveSeller(e:React.FormEvent){e.preventDefault();if(!sellerForm.name.trim())return; if(editing){setSellers(p=>p.map(s=>s.id===editing?{...s,name:sellerForm.name.trim(),phone:sellerForm.phone,rate:Number(sellerForm.rate)}:s));notify('Fiche vendeur modifiée en mémoire uniquement : connexion Neon requise.')}else{setSellers(p=>[...p,{id:crypto.randomUUID(),name:sellerForm.name.trim(),phone:sellerForm.phone,rate:Number(sellerForm.rate),active:true}]);notify('Vendeur ajouté en mémoire uniquement : connexion Neon requise.')}setModal(null);setEditing(null);setSellerForm({name:'',phone:'',rate:defaultRate})}
- function saveSupplier(e:React.FormEvent){e.preventDefault();if(!supplierForm.name.trim())return;if(editing){setSuppliers(p=>p.map(x=>x.id===editing?{...x,...supplierForm,name:supplierForm.name.trim()}:x));notify('Fiche fournisseur modifiée en mémoire uniquement : connexion Neon requise.')}else{setSuppliers(p=>[...p,{id:crypto.randomUUID(),...supplierForm,name:supplierForm.name.trim(),active:true}]);notify('Fournisseur ajouté en mémoire uniquement : connexion Neon requise.')}setModal(null);setEditing(null);setSupplierForm({name:'',contact:'',phone:'',email:'',address:'',taxId:''})}
+ async function saveSeller(e:React.FormEvent){e.preventDefault();if(!sellerForm.name.trim())return;try{await dataApi('sellers','POST',{name:sellerForm.name.trim(),phone:sellerForm.phone,rate:Number(sellerForm.rate)});setSellers(await dataApi('sellers'));notify('Vendeur enregistré dans Neon.');setModal(null);setEditing(null);setSellerForm({name:'',phone:'',rate:defaultRate})}catch(err){notify(err instanceof Error?err.message:'Enregistrement impossible')}}
+ async function saveSupplier(e:React.FormEvent){e.preventDefault();if(!supplierForm.name.trim())return;try{await dataApi('suppliers','POST',supplierForm);setSuppliers(await dataApi('suppliers'));notify('Fournisseur enregistré dans Neon.');setModal(null);setEditing(null);setSupplierForm({name:'',contact:'',phone:'',email:'',address:'',taxId:''})}catch(err){notify(err instanceof Error?err.message:'Enregistrement impossible')}}
  function saveOperation(e:React.FormEvent){e.preventDefault();const q=Number(opForm.quantity),price=Number(opForm.price);if(q<=0||price<0)return
  if(modal==='receipts'){if(!opForm.supplierId||Number(opForm.unitCost)<0)return;setReceipts(p=>[...p,{id:crypto.randomUUID(),supplierId:opForm.supplierId,date:opForm.date,quantity:q,unitCost:Number(opForm.unitCost),reference:opForm.reference.trim()||'REC-'+Date.now()}]);notify('Réception ajoutée à l’affichage temporaire. Aucune sauvegarde en ligne n’est encore active.')}
  if(modal==='distributions'){if(!opForm.sellerId||!opForm.supplierId||q>availableStock||q>supplierStock(opForm.supplierId)){notify('Stock insuffisant chez ce fournisseur ou dans le stock général. Vérifiez les quantités disponibles.');return}setDistributions(p=>[...p,{id:crypto.randomUUID(),sellerId:opForm.sellerId,supplierId:opForm.supplierId,date:opForm.date,quantity:q,price,status:'Validée'}]);notify('Distribution ajoutée à l’affichage temporaire. Aucune sauvegarde en ligne n’est encore active.')}
