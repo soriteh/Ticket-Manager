@@ -16,7 +16,7 @@ type Res = {
 const authBaseUrl = process.env.NEON_AUTH_BASE_URL || process.env.VITE_NEON_AUTH_URL
 const jwksUrl = process.env.NEON_AUTH_JWKS_URL || (authBaseUrl ? new URL('jwks', authBaseUrl.endsWith('/') ? authBaseUrl : authBaseUrl + '/').toString() : '')
 const jwks = jwksUrl ? createRemoteJWKSet(new URL(jwksUrl)) : null
-const resources = new Set(['sellers', 'suppliers', 'receipts', 'distributions', 'sales', 'remittances'])
+const resources = new Set(['sellers', 'suppliers', 'receipts', 'distributions', 'sales', 'remittances', 'commissions'])
 
 function fail(res: Res, status: number, error: string) {
   return res.status(status).json({ ok: false, error })
@@ -70,6 +70,9 @@ export default async function handler(req: Req, res: Res) {
           break
         case 'distributions':
           rows = await sql`select d.id, d.seller_id as "sellerId", d.supplier_id as "supplierId", d.distributed_at::date::text as date, di.quantity, di.reference_unit_price as price, 'Validée' as status from public.distributions d join public.distribution_items di on di.distribution_id=d.id where d.status='validated' order by d.distributed_at desc`
+          break
+        case 'commissions':
+          rows = await sql`select supplier_id as "supplierId", seller_id as "sellerId", commission_rate as rate, valid_from as "validFrom", valid_to as "validTo" from public.supplier_receiver_commissions where valid_to is null or valid_to >= current_date order by valid_from desc`
           break
         case 'sales':
           rows = await sql`select s.id, s.seller_id as "sellerId", s.supplier_id as "supplierId", s.sold_at::date::text as date, si.quantity, si.unit_price as price, 'Validée' as status from public.sales s join public.sale_items si on si.sale_id=s.id where s.status='validated' order by s.sold_at desc`
@@ -128,6 +131,19 @@ export default async function handler(req: Req, res: Res) {
         `
         if (!rows.length) return fail(res, 409, 'Stock fournisseur insuffisant ou opération impossible')
         return res.status(201).json({ok:true,id:rows[0].id})
+      }
+      case 'commissions': {
+        if (!['super_admin','admin'].includes(profile.role)) return fail(res, 403, 'Seuls les administrateurs peuvent modifier les commissions')
+        const supplierId=requiredText('supplierId'), sellerId=requiredText('sellerId'), rate=Number(body.rate), validFrom=requiredText('validFrom')||date
+        if(!supplierId||!sellerId||!Number.isFinite(rate)||rate<0||rate>100) return fail(res,400,'Fournisseur, receveur ou taux invalide')
+        const rows=await sql`
+          insert into public.supplier_receiver_commissions(supplier_id,seller_id,commission_rate,valid_from,created_by)
+          values(${supplierId}::uuid,${sellerId}::uuid,${rate},${validFrom}::date,${userId}::uuid)
+          on conflict(supplier_id,seller_id,valid_from)
+          do update set commission_rate=excluded.commission_rate
+          returning id, commission_rate as rate
+        `
+        return res.status(200).json({ok:true,data:rows[0]})
       }
       case 'sales': {
         const sellerId = requiredText('sellerId'), supplierId = requiredText('supplierId'), quantity = positiveInt('quantity'), price = Number(body.price)
