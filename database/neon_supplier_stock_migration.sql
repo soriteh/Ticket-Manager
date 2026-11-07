@@ -45,7 +45,7 @@ create table if not exists public.supplier_receiver_commissions (
   commission_rate numeric(5,2) not null check (commission_rate between 0 and 100),
   valid_from date not null default current_date,
   valid_to date,
-  created_by text references neon_auth."user"(id),
+  created_by uuid references neon_auth."user"(id),
   created_at timestamptz not null default now(),
   check (valid_to is null or valid_to >= valid_from),
   unique (supplier_id, seller_id, valid_from)
@@ -84,5 +84,4 @@ left join (
   group by supplier_id
 ) ds on ds.supplier_id = sp.id;
 
--- Contrôle de cohérence : les anciennes distributions/ventes restent sans fournisseur
--- et doivent être rapprochées manuellement avant d'être incluses dans le stock par fournisseur.
+-- Les anciennes distributions/ventes sans fournisseur restent à rapprocher manuellement.
