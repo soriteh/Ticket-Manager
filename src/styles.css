@@ -34,3 +34,36 @@ input:focus{transition:border-color .18s ease,box-shadow .18s ease;box-shadow:0 
 .row-action{border:0;background:transparent;color:#0870c5;font-size:10px;font-weight:700;padding:5px;cursor:pointer}.row-action.danger{color:#c04b4b}.status-ok{display:inline-block;background:#e9f8f0;color:#19845a;border-radius:20px;padding:4px 8px;font-size:9px;font-weight:700}
 .settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px}.settings-card h3{display:flex;align-items:center;gap:9px;font:800 13px Manrope;color:#20334d;margin:0 0 18px}.settings-card h3 svg{color:#1474bd}.settings-card label,.modal label{display:grid;gap:7px;margin:13px 0;color:#526176;font-size:10px;font-weight:700}.settings-card input,.settings-card select,.modal input,.modal select{width:100%;box-sizing:border-box;border:1px solid #e1e7ef;border-radius:7px;background:#fff;padding:11px 12px;color:#253951;font:400 11px 'DM Sans',Arial,sans-serif;outline-color:#147ac7}.settings-card p{font-size:10px;color:#8390a3;line-height:1.65;margin:12px 0 18px}.settings-card .btn-primary{margin-top:8px}
 @media(max-width:760px){.quick-actions,.settings-grid{grid-template-columns:1fr}.metric-list>div{align-items:flex-start}.metric-list b{max-width:58%}.row-action{display:inline-block}}
+
+
+/* Navigation latérale : défilement indépendant, même sur les écrans bas */
+.sidebar{
+  height:100vh;
+  height:100dvh;
+  overflow:hidden;
+  min-height:0;
+}
+.sidebar .nav-label{flex:0 0 auto}
+.sidebar nav{
+  flex:1 1 auto;
+  min-height:0;
+  overflow-y:auto;
+  overflow-x:hidden;
+  overscroll-behavior:contain;
+  scrollbar-width:thin;
+  scrollbar-color:#365477 transparent;
+  padding:0 3px 12px 0;
+  align-content:start;
+}
+.sidebar nav::-webkit-scrollbar{width:5px}
+.sidebar nav::-webkit-scrollbar-track{background:transparent}
+.sidebar nav::-webkit-scrollbar-thumb{background:#365477;border-radius:8px}
+.sidebar-bottom{flex:0 0 auto}
+@media(max-height:620px){
+  .sidebar{padding-top:14px;padding-bottom:12px}
+  .brand{padding-bottom:14px}
+  .nav-label{margin-top:16px}
+  .help-card{padding:10px}
+  .help-card p{margin:6px 0}
+  .profile{margin-top:10px;padding-top:10px}
+}
