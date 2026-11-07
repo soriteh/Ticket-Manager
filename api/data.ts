@@ -107,9 +107,52 @@ export default async function handler(req: Req, res: Res) {
         const result = await sql`insert into public.ticket_receipts (reference, supplier_id, received_at, quantity, unit_cost, created_by) values (${reference}, ${supplierId}::uuid, ${date}::date, ${quantity}, ${unitCost}, ${userId}::uuid) returning id`
         return res.status(201).json({ ok: true, id: result[0].id })
       }
-      case 'distributions':
-      case 'sales':
-        return fail(res, 501, 'Cette opération nécessite la validation transactionnelle du stock. Elle sera activée après le contrôle des types de tickets et des données existantes.')
+      case 'distributions': {
+        const sellerId = requiredText('sellerId'), supplierId = requiredText('supplierId'), quantity = positiveInt('quantity'), price = Number(body.price)
+        if (!sellerId || !supplierId || !quantity || !Number.isSafeInteger(price) || price < 0) return fail(res, 400, 'Données de distribution invalides')
+        const ticketTypes = await sql`insert into public.ticket_types (name) values ('Ticket standard') on conflict (name) do update set name=excluded.name returning id`
+        const ref = 'DST-' + crypto.randomUUID().slice(0, 8).toUpperCase()
+        const rows = await sql`
+          with available as (
+            select coalesce((select sum(quantity) from public.ticket_receipts where supplier_id=${supplierId}::uuid and status='validated'),0)
+              - coalesce((select sum(di.quantity) from public.distributions d join public.distribution_items di on di.distribution_id=d.id where d.supplier_id=${supplierId}::uuid and d.status='validated'),0) as qty
+          ), created as (
+            insert into public.distributions(reference,seller_id,supplier_id,distributed_at,status,created_by)
+            select ${ref},${sellerId}::uuid,${supplierId}::uuid,${date}::date,'validated',${userId}::uuid
+            from available where qty >= ${quantity} returning id
+          ), item as (
+            insert into public.distribution_items(distribution_id,ticket_type_id,quantity,reference_unit_price)
+            select created.id,${ticketTypes[0].id}::uuid,${quantity},${price} from created returning distribution_id
+          )
+          select distribution_id as id from item
+        `
+        if (!rows.length) return fail(res, 409, 'Stock fournisseur insuffisant ou opération impossible')
+        return res.status(201).json({ok:true,id:rows[0].id})
+      }
+      case 'sales': {
+        const sellerId = requiredText('sellerId'), supplierId = requiredText('supplierId'), quantity = positiveInt('quantity'), price = Number(body.price)
+        if (!sellerId || !supplierId || !quantity || !Number.isSafeInteger(price) || price < 0) return fail(res, 400, 'Données de vente invalides')
+        const ticketTypes = await sql`insert into public.ticket_types (name) values ('Ticket standard') on conflict (name) do update set name=excluded.name returning id`
+        const rateRows = await sql`select commission_rate from public.sellers where id=${sellerId}::uuid and is_active=true`
+        if (!rateRows.length) return fail(res, 400, 'Vendeur introuvable ou inactif')
+        const ref = 'VTE-' + crypto.randomUUID().slice(0, 8).toUpperCase()
+        const rows = await sql`
+          with available as (
+            select coalesce((select sum(di.quantity) from public.distributions d join public.distribution_items di on di.distribution_id=d.id where d.seller_id=${sellerId}::uuid and d.supplier_id=${supplierId}::uuid and d.status='validated'),0)
+              - coalesce((select sum(si.quantity) from public.sales s join public.sale_items si on si.sale_id=s.id where s.seller_id=${sellerId}::uuid and s.supplier_id=${supplierId}::uuid and s.status='validated'),0) as qty
+          ), created as (
+            insert into public.sales(reference,seller_id,supplier_id,sold_at,status,created_by)
+            select ${ref},${sellerId}::uuid,${supplierId}::uuid,${date}::date,'validated',${userId}
+            from available where qty >= ${quantity} returning id
+          ), item as (
+            insert into public.sale_items(sale_id,ticket_type_id,quantity,unit_price,commission_rate)
+            select created.id,${ticketTypes[0].id}::uuid,${quantity},${price},${Number(rateRows[0].commission_rate)} from created returning sale_id
+          )
+          select sale_id as id from item
+        `
+        if (!rows.length) return fail(res, 409, 'Stock invendu insuffisant pour ce vendeur et ce fournisseur')
+        return res.status(201).json({ok:true,id:rows[0].id})
+      }
       case 'remittances': {
         const sellerId = requiredText('sellerId'), amount = positiveInt('amount')
         const methods: Record<string, string> = { 'Espèces': 'cash', 'Virement bancaire': 'bank_transfer', 'Mobile Money': 'mobile_money', 'Autre': 'other' }
