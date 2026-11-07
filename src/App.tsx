@@ -125,7 +125,7 @@ export default function App() {
         <h1 style={{marginBottom:10,color:'#071a36'}}>Saisissez votre code</h1>
         <p style={{color:'#475569',lineHeight:1.65}}>Un code de vérification a été envoyé à <strong>{email}</strong>. Consultez également vos courriers indésirables.</p>
         <label style={{display:'block',textAlign:'left',fontWeight:600,color:'#243247',marginTop:22}}>Code de vérification
-          <input required inputMode="numeric" autoComplete="one-time-code" maxLength={8} value={otp} onChange={e=>setOtp(e.target.value.replace(/\\D/g,''))} placeholder="Entrez le code reçu" style={{display:'block',width:'100%',boxSizing:'border-box',padding:15,marginTop:8,border:'1px solid #cbd5e1',borderRadius:9,fontSize:22,letterSpacing:6,textAlign:'center'}}/>
+          <input required inputMode="numeric" autoComplete="one-time-code" maxLength={8} value={otp} onChange={e=>setOtp(e.target.value.replace(/\D/g,''))} placeholder="Entrez le code reçu" style={{display:'block',width:'100%',boxSizing:'border-box',padding:15,marginTop:8,border:'1px solid #cbd5e1',borderRadius:9,fontSize:22,letterSpacing:6,textAlign:'center'}}/>
         </label>
         {error && <p role="alert" style={{color:'#b42318',fontSize:13}}>{error}</p>}
         {success && <p role="status" style={{color:'#067647',fontSize:13}}>{success}</p>}
@@ -146,10 +146,22 @@ export default function App() {
         if (mode === 'signup') {
           const result = await authClient.signUp.email({ email, password, name: fullName })
           if (result.error) throw new Error(result.error.message || 'Création du compte impossible.')
-          setOtp('')\n          setVerificationPending(true)
+          setOtp('')
+          setVerificationPending(true)
         } else {
           const result = await authClient.signIn.email({ email, password })
-          if (result.error) {\n            const message = result.error.message || 'Connexion impossible. Vérifiez vos identifiants.'\n            if (/email.*(not|isn.t)\\s*verified|email.*verification/i.test(message)) {\n              const client = authClient as any\n              const sent = await client.emailOtp.sendVerificationOtp({ email, type: 'email-verification' })\n              if (sent?.error) throw new Error(sent.error.message || message)\n              setOtp('')\n              setVerificationPending(true)\n              return\n            }\n            throw new Error(message)\n          }
+          if (result.error) {
+            const message = result.error.message || 'Connexion impossible. Vérifiez vos identifiants.'
+            if (/email.*(not|isn.t)\\s*verified|email.*verification/i.test(message)) {
+              const client = authClient as any
+              const sent = await client.emailOtp.sendVerificationOtp({ email, type: 'email-verification' })
+              if (sent?.error) throw new Error(sent.error.message || message)
+              setOtp('')
+              setVerificationPending(true)
+              return
+            }
+            throw new Error(message)
+          }
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Opération impossible. Vérifiez les informations saisies.')
