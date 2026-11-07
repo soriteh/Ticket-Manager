@@ -4,7 +4,7 @@
 create extension if not exists pgcrypto;
 
 create table if not exists public.tm_profiles (
-  user_id text primary key references neon_auth."user"(id) on delete cascade,
+  user_id uuid primary key references neon_auth."user"(id) on delete cascade,
   full_name text not null,
   phone text,
   role text not null default 'seller'
@@ -48,7 +48,7 @@ create table if not exists public.distributions (
   distributed_at timestamptz not null default now(),
   status text not null default 'draft' check (status in ('draft','validated','cancelled')),
   notes text,
-  created_by text references neon_auth."user"(id),
+  created_by uuid references neon_auth."user"(id),
   created_at timestamptz not null default now()
 );
 
@@ -94,14 +94,14 @@ create table if not exists public.remittances (
   payment_method text not null check (payment_method in ('cash','bank_transfer','mobile_money','other')),
   transaction_reference text,
   paid_at timestamptz not null default now(),
-  received_by text references neon_auth."user"(id),
+  received_by uuid references neon_auth."user"(id),
   notes text,
   created_at timestamptz not null default now()
 );
 
 create table if not exists public.audit_logs (
   id bigint generated always as identity primary key,
-  actor_id text references neon_auth."user"(id),
+  actor_id uuid references neon_auth."user"(id),
   action text not null,
   entity_type text not null,
   entity_id uuid,
