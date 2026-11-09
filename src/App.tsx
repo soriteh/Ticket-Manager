@@ -15,12 +15,27 @@ const today=()=>new Date().toISOString().slice(0,10)
 
 async function dataApi(resource:string, method:'GET'|'POST'='GET', body?:Record<string,unknown>){
  const auth=authClient as any
- if(typeof auth.token!=='function') throw new Error('La méthode token() de Neon Auth est indisponible. Vérifiez la version du client Neon Auth.')
- const tokenResult=await auth.token()
- const token=tokenResult?.data?.token||tokenResult?.token
- if(!token) throw new Error(tokenResult?.error?.message||'Aucun jeton JWT Neon. Votre session a peut-être expiré : reconnectez-vous puis réessayez.')
+ let token:string|undefined
+ let tokenError=''
+ try{
+  if(typeof auth.token==='function'){
+   const tokenResult=await auth.token()
+   token=tokenResult?.data?.token||tokenResult?.token
+   if(tokenResult?.error) tokenError=tokenResult.error.message||'Erreur lors de la récupération du JWT'
+  }
+ }catch(error){tokenError=error instanceof Error?error.message:'Échec de récupération du JWT'}
+ if(!token&&typeof auth.getSession==='function'){
+  try{
+   const sessionResult=await auth.getSession({fetchOptions:{onSuccess:(context:any)=>{
+    token=context.response.headers.get('set-auth-jwt')||context.response.headers.get('x-auth-jwt')||undefined
+   }}})
+   token=token||sessionResult?.data?.session?.token||sessionResult?.data?.token||sessionResult?.session?.token
+  }catch(error){if(!tokenError)tokenError=error instanceof Error?error.message:'Échec de lecture de session'}
+ }
+ if(!token) throw new Error('Neon Auth n’a pas fourni de JWT. '+(tokenError||'La session est absente ou expirée. Reconnectez-vous puis réessayez.'))
  const response=await fetch('/api/data?resource='+encodeURIComponent(resource),{
   method,
+  credentials:'same-origin',
   headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
   ...(body?{body:JSON.stringify(body)}:{})
  })
