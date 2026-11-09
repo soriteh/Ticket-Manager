@@ -14,25 +14,21 @@ const nav:{id:Tab;label:string;icon:any}[]=[{id:'dashboard',label:'Vue d’ensem
 const today=()=>new Date().toISOString().slice(0,10)
 
 async function dataApi(resource:string, method:'GET'|'POST'='GET', body?:Record<string,unknown>){
- const auth=authClient as any
+ const authUrl=String(import.meta.env.VITE_NEON_AUTH_URL||'').replace(/\\/$/,'')
+ if(!authUrl) throw new Error('URL Neon Auth absente de la configuration.')
  let token:string|undefined
  let tokenError=''
+ // Neon Managed Auth issues a short-lived JWT at /token using the secure session cookie.
  try{
-  if(typeof auth.token==='function'){
-   const tokenResult=await auth.token()
-   token=tokenResult?.data?.token||tokenResult?.token
-   if(tokenResult?.error) tokenError=tokenResult.error.message||'Erreur lors de la récupération du JWT'
+  const tokenResponse=await fetch(authUrl+'/token',{method:'GET',credentials:'include',headers:{Accept:'application/json'},cache:'no-store'})
+  const tokenPayload=await tokenResponse.json().catch(()=>null)
+  if(tokenResponse.ok){
+   token=tokenPayload?.token||tokenPayload?.access_token||tokenPayload?.data?.token||tokenPayload?.data?.access_token||tokenPayload?.session?.access_token
+  }else{
+   tokenError='Neon Auth /token a répondu HTTP '+tokenResponse.status
   }
- }catch(error){tokenError=error instanceof Error?error.message:'Échec de récupération du JWT'}
- if(!token&&typeof auth.getSession==='function'){
-  try{
-   const sessionResult=await auth.getSession({fetchOptions:{onSuccess:(context:any)=>{
-    token=context.response.headers.get('set-auth-jwt')||context.response.headers.get('x-auth-jwt')||undefined
-   }}})
-   token=token||sessionResult?.data?.session?.token||sessionResult?.data?.token||sessionResult?.session?.token
-  }catch(error){if(!tokenError)tokenError=error instanceof Error?error.message:'Échec de lecture de session'}
- }
- if(!token) throw new Error('Neon Auth n’a pas fourni de JWT. '+(tokenError||'La session est absente ou expirée. Reconnectez-vous puis réessayez.'))
+ }catch(error){tokenError=error instanceof Error?error.message:'Impossible de joindre Neon Auth'}
+ if(!token) throw new Error('Impossible de récupérer le JWT Neon. '+(tokenError||'Session expirée ou réponse JWT absente. Déconnectez-vous puis reconnectez-vous.'))
  const response=await fetch('/api/data?resource='+encodeURIComponent(resource),{
   method,
   credentials:'same-origin',
