@@ -15,11 +15,10 @@ const today=()=>new Date().toISOString().slice(0,10)
 
 async function dataApi(resource:string, method:'GET'|'POST'='GET', body?:Record<string,unknown>){
  const auth=authClient as any
- if(typeof auth.getSession!=='function') throw new Error('Le client Neon Auth ne fournit pas getSession(). Vérifiez la configuration de connexion.')
- const sessionResult=await auth.getSession()
- const session=sessionResult?.data?.session||sessionResult?.data||sessionResult?.session||sessionResult
- const token=session?.access_token||session?.session?.access_token||session?.token
- if(!token) throw new Error('Aucun JWT dans la session Neon. Reconnectez-vous, puis réessayez. Si le problème persiste, vérifiez la configuration JWT de Neon Auth.')
+ if(typeof auth.token!=='function') throw new Error('La méthode token() de Neon Auth est indisponible. Vérifiez la version du client Neon Auth.')
+ const tokenResult=await auth.token()
+ const token=tokenResult?.data?.token||tokenResult?.token
+ if(!token) throw new Error(tokenResult?.error?.message||'Aucun jeton JWT Neon. Votre session a peut-être expiré : reconnectez-vous puis réessayez.')
  const response=await fetch('/api/data?resource='+encodeURIComponent(resource),{
   method,
   headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
