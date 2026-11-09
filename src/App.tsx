@@ -15,16 +15,17 @@ const today=()=>new Date().toISOString().slice(0,10)
 
 async function dataApi(resource:string, method:'GET'|'POST'='GET', body?:Record<string,unknown>){
  const auth=authClient as any
- const tokenResult=await auth.token()
- const token=tokenResult?.data?.token||tokenResult?.token
- if(!token) throw new Error('Session Neon invalide. Reconnectez-vous.')
+ if(typeof auth.getJWTToken!=='function') throw new Error('Le client Neon Auth ne fournit pas getJWTToken(). Vérifiez la configuration de connexion.')
+ const tokenResult=await auth.getJWTToken()
+ const token=typeof tokenResult==='string'?tokenResult:(tokenResult?.data?.token||tokenResult?.token)
+ if(!token) throw new Error('Aucun jeton de session Neon. Déconnectez-vous puis reconnectez-vous.')
  const response=await fetch('/api/data?resource='+encodeURIComponent(resource),{
   method,
   headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
   ...(body?{body:JSON.stringify(body)}:{})
  })
- const result=await response.json()
- if(!response.ok||!result.ok) throw new Error(result.error||'Erreur API')
+ const result=await response.json().catch(()=>({ok:false,error:'Réponse serveur illisible'}))
+ if(!response.ok||!result.ok) throw new Error(result.error||'Erreur API ('+response.status+')')
  return result.data??result
 }
 
