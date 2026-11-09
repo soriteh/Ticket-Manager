@@ -14,7 +14,7 @@ type Res = {
 }
 
 const authBaseUrl = process.env.NEON_AUTH_BASE_URL || process.env.VITE_NEON_AUTH_URL
-const jwksUrl = process.env.NEON_AUTH_JWKS_URL || (authBaseUrl ? new URL('jwks', authBaseUrl.endsWith('/') ? authBaseUrl : authBaseUrl + '/').toString() : '')
+const jwksUrl = process.env.NEON_AUTH_JWKS_URL || (authBaseUrl ? new URL('.well-known/jwks.json', authBaseUrl.endsWith('/') ? authBaseUrl : authBaseUrl + '/').toString() : '')
 const jwks = jwksUrl ? createRemoteJWKSet(new URL(jwksUrl)) : null
 const resources = new Set(['sellers', 'suppliers', 'receipts', 'distributions', 'sales', 'remittances', 'commissions'])
 
