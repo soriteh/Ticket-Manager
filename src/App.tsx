@@ -14,7 +14,8 @@ const nav:{id:Tab;label:string;icon:any}[]=[{id:'dashboard',label:'Vue d’ensem
 const today=()=>new Date().toISOString().slice(0,10)
 
 async function dataApi(resource:string, method:'GET'|'POST'='GET', body?:Record<string,unknown>){
- const authUrl=String(import.meta.env.VITE_NEON_AUTH_URL||'').replace(/\\/$/,'')
+ const rawAuthUrl=String(import.meta.env.VITE_NEON_AUTH_URL||'')
+ const authUrl=rawAuthUrl.endsWith('/')?rawAuthUrl.slice(0,-1):rawAuthUrl
  if(!authUrl) throw new Error('URL Neon Auth absente de la configuration.')
  let token:string|undefined
  let tokenError=''
