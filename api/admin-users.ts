@@ -22,11 +22,11 @@ export default async function handler(req:Req,res:Res){
   if(!current.length||!current[0].is_active||!['admin','super_admin'].includes(String(current[0].role)))return fail(res,403,'Accès réservé aux administrateurs actifs.')
   if(req.method==='GET'){
    const rows=await sql`select u.id,u.email,u.name,p.full_name as "fullName",coalesce(p.role,'sans_profil') as role,coalesce(p.is_active,false) as "isActive" from neon_auth."user" u left join public.tm_profiles p on p.user_id=u.id order by u.email asc`
-   return res.status(200).json({ok:true,data:rows.map((row:any)=>({...row,canResetPassword:current[0].role==='super_admin'}))})
+   return res.status(200).json({ok:true,data:rows.map((row:any)=>({...row,canResetPassword:['super_admin','admin'].includes(String(current[0].role))}))})
   }
   const body=req.body||{}
   if(body.action==='authorizePasswordReset'){
-   if(current[0].role!=='super_admin')return fail(res,403,'Seul le super administrateur peut réinitialiser le mot de passe d’un utilisateur.')
+   if(!['super_admin','admin'].includes(String(current[0].role)))return fail(res,403,'Action réservée aux administrateurs actifs.')
    const resetTarget=typeof body.userId==='string'?body.userId:''
    if(!resetTarget)return fail(res,400,'Identifiant utilisateur manquant')
    const targetUser=await sql`select id from neon_auth."user" where id=${resetTarget}::uuid limit 1`
@@ -34,10 +34,10 @@ export default async function handler(req:Req,res:Res){
    return res.status(200).json({ok:true})
   }
   const target=typeof body.userId==='string'?body.userId:'',role=typeof body.role==='string'?body.role:'',active=body.isActive
-  const roles=['admin','sales_manager','cashier','seller','auditor']
+  const roles=['super_admin','admin','sales_manager','cashier','seller','auditor']
   if(!target)return fail(res,400,'Identifiant utilisateur manquant')
   if(role&&!roles.includes(role))return fail(res,400,'Rôle non autorisé')
-  if(role==='admin'&&current[0].role!=='super_admin')return fail(res,403,'Seul un super administrateur peut attribuer le rôle administrateur.')
+  if(['admin','super_admin'].includes(role)&&current[0].role!=='super_admin')return fail(res,403,'Seul un super administrateur peut attribuer les rôles administrateur et super administrateur.')
   if(typeof active!=='boolean'&&!role)return fail(res,400,'Aucune modification demandée')
   if(target===userId&&active===false)return fail(res,400,'Vous ne pouvez pas désactiver votre propre compte.')
   if(target===userId&&role&&role!=='admin'&&role!=='super_admin')return fail(res,400,'Vous ne pouvez pas retirer vos propres droits administrateur.')
