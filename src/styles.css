@@ -395,3 +395,62 @@ input:focus{transition:border-color .18s ease,box-shadow .18s ease;box-shadow:0 
 @media(prefers-reduced-motion:reduce){
   .app-shell>.main::before,.app-shell>.main::after{animation:none!important}
 }
+
+
+/* Harmonisation du contraste typographique dans toute l'application */
+button{
+  color:inherit;
+}
+.sidebar{
+  color:#dce6f5;
+}
+.sidebar .workspace{
+  color:#dceaff;
+}
+.sidebar .workspace b{
+  color:#f5f9ff;
+  font-weight:750;
+}
+.sidebar .workspace small{
+  color:#a9bfd9;
+}
+.sidebar .nav-label{
+  color:#91a9c8;
+}
+.sidebar .nav-item{
+  color:#c0d0e4;
+}
+.sidebar .nav-item:hover,
+.sidebar .nav-item.active{
+  color:#ffffff;
+}
+.sidebar .help-card b{
+  color:#f2f7ff;
+}
+.sidebar .help-card p{
+  color:#b3c5dc;
+}
+.sidebar .profile b{
+  color:#ffffff;
+}
+.sidebar .profile small{
+  color:#b0c3dc;
+}
+/* Les libellés et textes secondaires restent lisibles sur les surfaces claires */
+.main{
+  color:#263b55;
+}
+.main .crumb,
+.main .panel-head p,
+.main .welcome p:not(.eyebrow),
+.main .module-panel>p{
+  color:#667991;
+}
+.main label{
+  color:#354b66;
+}
+.main input,
+.main select,
+.main textarea{
+  color:#243951;
+}
