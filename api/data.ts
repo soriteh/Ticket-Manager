@@ -16,7 +16,7 @@ type Res = {
 const authBaseUrl = process.env.NEON_AUTH_BASE_URL || process.env.VITE_NEON_AUTH_URL
 const jwksUrl = process.env.NEON_AUTH_JWKS_URL || (authBaseUrl ? new URL('.well-known/jwks.json', authBaseUrl.endsWith('/') ? authBaseUrl : authBaseUrl + '/').toString() : '')
 const jwks = jwksUrl ? createRemoteJWKSet(new URL(jwksUrl)) : null
-const resources = new Set(['sellers', 'suppliers', 'receipts', 'distributions', 'sales', 'remittances', 'commissions'])
+const resources = new Set(['sellers', 'suppliers', 'receipts', 'distributions', 'sales', 'remittances', 'commissions', 'settings'])
 
 function fail(res: Res, status: number, error: string) {
   return res.status(status).json({ ok: false, error })
@@ -75,6 +75,11 @@ export default async function handler(req: Req, res: Res) {
         case 'commissions':
           rows = await sql`select supplier_id as "supplierId", seller_id as "sellerId", commission_rate as rate, valid_from as "validFrom", valid_to as "validTo" from public.supplier_receiver_commissions where valid_to is null or valid_to >= current_date order by valid_from desc`
           break
+        case 'settings': {
+          const configured = await sql`select ticket_name as "ticketName", ticket_price as "ticketPrice", default_commission_rate as "defaultCommissionRate" from public.tm_app_settings where id = true limit 1`
+          rows = configured.length ? configured : [{ticketName:'Ticket standard',ticketPrice:5000,defaultCommissionRate:10}]
+          break
+        }
         case 'sales':
           rows = await sql`select s.id, s.seller_id as "sellerId", s.supplier_id as "supplierId", s.sold_at::date::text as date, si.quantity, si.unit_price as price, 'Validée' as status from public.sales s join public.sale_items si on si.sale_id=s.id where s.status='validated' order by s.sold_at desc`
           break
@@ -90,6 +95,17 @@ export default async function handler(req: Req, res: Res) {
     const date = requiredText('date') || new Date().toISOString().slice(0, 10)
 
     switch (resource) {
+      case 'settings': {
+        if (!['super_admin','admin'].includes(profile.role)) return fail(res,403,'Seuls les administrateurs autorisés peuvent modifier les paramètres.')
+        const ticketName = requiredText('ticketName')
+        const ticketPrice = Number(body.ticketPrice)
+        const defaultRate = Number(body.defaultCommissionRate)
+        if (!ticketName || ticketName.length > 120) return fail(res,400,'Nom du type de ticket obligatoire (120 caractères maximum).')
+        if (!Number.isSafeInteger(ticketPrice) || ticketPrice < 0) return fail(res,400,'Prix de référence invalide.')
+        if (!Number.isFinite(defaultRate) || defaultRate < 0 || defaultRate > 100) return fail(res,400,'Taux de commission invalide.')
+        const rows = await sql`insert into public.tm_app_settings (id,ticket_name,ticket_price,default_commission_rate,updated_by,updated_at) values (true,${ticketName},${ticketPrice},${defaultRate},${userId}::uuid,now()) on conflict (id) do update set ticket_name=excluded.ticket_name,ticket_price=excluded.ticket_price,default_commission_rate=excluded.default_commission_rate,updated_by=excluded.updated_by,updated_at=now() returning ticket_name as "ticketName",ticket_price as "ticketPrice",default_commission_rate as "defaultCommissionRate"`
+        return res.status(200).json({ok:true,data:rows[0]})
+      }
       case 'sellers': {
         const name = requiredText('name')
         if (!name) return fail(res, 400, 'Nom du vendeur obligatoire')
