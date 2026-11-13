@@ -343,3 +343,55 @@ input:focus{transition:border-color .18s ease,box-shadow .18s ease;box-shadow:0 
 .app-shell>.main .module-panel h3{
   color:#15243b;
 }
+
+
+/* Electron Flow visible sur les pages sans sacrifier le contraste */
+.app-shell>.main{
+  position:relative;
+  isolation:isolate;
+  overflow:hidden;
+  background:#f5f8fc!important;
+}
+.app-shell>.main::before,
+.app-shell>.main::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  z-index:0;
+}
+.app-shell>.main::before{
+  opacity:.62;
+  background-image:
+    radial-gradient(circle,rgba(37,143,220,.85) 0 1.5px,rgba(37,143,220,.22) 2px,transparent 4px),
+    radial-gradient(circle,rgba(255,132,43,.9) 0 1.5px,rgba(255,132,43,.2) 2px,transparent 4px),
+    linear-gradient(90deg,rgba(30,112,190,.12) 1px,transparent 1px),
+    linear-gradient(rgba(30,112,190,.10) 1px,transparent 1px),
+    linear-gradient(135deg,transparent 48.8%,rgba(255,132,43,.26) 49.5%,rgba(255,132,43,.26) 50%,transparent 50.7%);
+  background-size:180px 120px,240px 170px,54px 54px,54px 54px,180px 180px;
+  background-position:0 0,70px 30px,0 0,0 0,0 0;
+  animation:tmGlobalElectronFlow 15s linear infinite;
+}
+.app-shell>.main::after{
+  opacity:.72;
+  background:
+    radial-gradient(ellipse at 12% 18%,rgba(0,132,255,.13),transparent 34%),
+    radial-gradient(ellipse at 88% 24%,rgba(255,120,0,.10),transparent 30%),
+    linear-gradient(105deg,transparent 35%,rgba(65,174,255,.11) 49%,rgba(255,143,61,.12) 51%,transparent 66%);
+  background-size:auto,auto,220% 100%;
+  animation:tmGlobalGlow 18s ease-in-out infinite alternate,tmGlobalCurrent 11s linear infinite;
+}
+.app-shell>.main>.topbar,
+.app-shell>.main>.content{
+  position:relative;
+  z-index:1;
+}
+.app-shell>.main>.topbar{
+  background:rgba(255,255,255,.94);
+}
+.app-shell>.main>.content{
+  background:transparent!important;
+}
+@media(prefers-reduced-motion:reduce){
+  .app-shell>.main::before,.app-shell>.main::after{animation:none!important}
+}
