@@ -82,7 +82,7 @@ export default async function handler(req: Req, res: Res) {
           break
         }
         case 'sales':
-          rows = await sql`select s.id, s.seller_id as "sellerId", s.supplier_id as "supplierId", s.sold_at::date::text as date, si.quantity, si.unit_price as price, si.supplier_receiver_commission_rate as "supplierReceiverRate", 'Validée' as status from public.sales s join public.sale_items si on si.sale_id=s.id where s.status='validated' order by s.sold_at desc`
+          rows = await sql`select s.id, s.seller_id as "sellerId", s.supplier_id as "supplierId", s.sold_at::date::text as date, si.quantity, si.unit_price as price, si.commission_rate as "commissionRate", si.supplier_receiver_commission_rate as "supplierReceiverRate", 'Validée' as status from public.sales s join public.sale_items si on si.sale_id=s.id where s.status='validated' order by s.sold_at desc`
           break
         default:
           rows = await sql`select id, seller_id as "sellerId", paid_at::date::text as date, amount, payment_method as method, transaction_reference as reference from public.remittances order by paid_at desc`
