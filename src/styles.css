@@ -585,3 +585,12 @@ button{
 .settings-save-panel{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:18px 20px;margin-top:16px}.settings-save-panel b{display:block;color:#20334d;font:800 13px Manrope}.settings-save-panel p{margin:6px 0 0;color:#8390a3;font-size:11px;line-height:1.6}.settings-save-panel .muted{font-size:11px;color:#64748b}@media(max-width:600px){.settings-save-panel{align-items:stretch;flex-direction:column}.settings-save-panel .btn-primary{width:100%}}
 
 .settings-fields-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 18px;margin-top:16px}.settings-fields-grid label,.commission-effective-date{display:flex;flex-direction:column;gap:7px;font-size:12px;font-weight:700;color:#33445d}.settings-fields-grid input,.settings-fields-grid select,.commission-effective-date input{width:100%;min-height:40px;border:1px solid #dbe3ed;border-radius:9px;padding:9px 11px;background:#fff;color:#1c2d43;font:500 13px inherit}.app-configuration-card>p,.supplier-receiver-settings>p{font-size:11px;color:#7a8798;line-height:1.6;margin:14px 0 0}.supplier-receiver-settings{margin-top:16px}.commission-effective-date{max-width:260px;margin:12px 0 18px}.supplier-receiver-settings .table-wrap{overflow-x:auto}.supplier-receiver-settings table input{min-height:36px;border:1px solid #dbe3ed;border-radius:8px;padding:7px 9px;max-width:100%}@media(max-width:700px){.settings-fields-grid{grid-template-columns:1fr}}
+
+/* États de chargement des données : ne jamais présenter une erreur comme un succès */
+.notice-error{background:#fff1f0!important;border-color:#ffc9c2!important;color:#a52820!important}
+.notice-error button{color:#a52820!important}
+/* En-tête du tableau de bord : contraste renforcé */
+.dashboard-hero .dashboard-period label{color:rgba(255,255,255,.88)!important;font-weight:700}
+.dashboard-hero .dashboard-period input{color:#fff!important;background:rgba(255,255,255,.14)!important;border:1px solid rgba(255,255,255,.34)!important;border-radius:10px;padding:12px 14px;min-height:48px;color-scheme:dark}
+.dashboard-hero .dashboard-period input:focus{outline:2px solid rgba(255,255,255,.45);outline-offset:2px}
+.dashboard-hero .dashboard-period input::-webkit-calendar-picker-indicator{filter:invert(1);opacity:.9}
