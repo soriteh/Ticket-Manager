@@ -73,16 +73,16 @@ export default async function handler(req: Req, res: Res) {
           rows = await sql`select d.id, d.seller_id as "sellerId", d.supplier_id as "supplierId", d.distributed_at::date::text as date, di.quantity, di.reference_unit_price as price, 'Validée' as status from public.distributions d join public.distribution_items di on di.distribution_id=d.id where d.status='validated' order by d.distributed_at desc`
           break
         case 'commissions':
-          rows = await sql`select supplier_id as "supplierId", seller_id as "sellerId", commission_rate as rate, valid_from as "validFrom", valid_to as "validTo" from public.supplier_receiver_commissions where valid_to is null or valid_to >= current_date order by valid_from desc`
+          rows = await sql`select distinct on (supplier_id,seller_id) supplier_id as "supplierId", seller_id as "sellerId", commission_rate as rate, valid_from as "validFrom", valid_to as "validTo" from public.supplier_receiver_commissions where valid_to is null or valid_to >= current_date order by supplier_id,seller_id,valid_from desc`
           break
         case 'settings': {
           let configured: any[] = []
-          try { configured = await sql`select ticket_name as "ticketName", ticket_price as "ticketPrice", default_commission_rate as "defaultCommissionRate" from public.tm_app_settings where id = true limit 1` } catch { configured = [] }
-          rows = configured.length ? configured.map((row:any)=>({...row,canManageSettings:['super_admin','admin'].includes(profile.role)})) : [{ticketName:'Ticket standard',ticketPrice:5000,defaultCommissionRate:10,canManageSettings:['super_admin','admin'].includes(profile.role)}]
+          try { configured = await sql`select app_name as "appName", organization_name as "organizationName", support_email as "supportEmail", support_phone as "supportPhone", timezone, ticket_name as "ticketName", ticket_price as "ticketPrice", default_commission_rate as "defaultCommissionRate" from public.tm_app_settings where id = true limit 1` } catch { configured = [] }
+          rows = configured.length ? configured.map((row:any)=>({...row,canManageSettings:['super_admin','admin'].includes(profile.role)})) : [{appName:'Ticket Manager',organizationName:'',supportEmail:'',supportPhone:'',timezone:'Africa/Conakry',ticketName:'Ticket standard',ticketPrice:5000,defaultCommissionRate:10,canManageSettings:['super_admin','admin'].includes(profile.role)}]
           break
         }
         case 'sales':
-          rows = await sql`select s.id, s.seller_id as "sellerId", s.supplier_id as "supplierId", s.sold_at::date::text as date, si.quantity, si.unit_price as price, 'Validée' as status from public.sales s join public.sale_items si on si.sale_id=s.id where s.status='validated' order by s.sold_at desc`
+          rows = await sql`select s.id, s.seller_id as "sellerId", s.supplier_id as "supplierId", s.sold_at::date::text as date, si.quantity, si.unit_price as price, si.supplier_receiver_commission_rate as "supplierReceiverRate", 'Validée' as status from public.sales s join public.sale_items si on si.sale_id=s.id where s.status='validated' order by s.sold_at desc`
           break
         default:
           rows = await sql`select id, seller_id as "sellerId", paid_at::date::text as date, amount, payment_method as method, transaction_reference as reference from public.remittances order by paid_at desc`
@@ -98,13 +98,21 @@ export default async function handler(req: Req, res: Res) {
     switch (resource) {
       case 'settings': {
         if (!['super_admin','admin'].includes(profile.role)) return fail(res,403,'Seuls les administrateurs autorisés peuvent modifier les paramètres.')
+        const appName = requiredText('appName')
+        const organizationName = requiredText('organizationName')
+        const supportEmail = requiredText('supportEmail')
+        const supportPhone = requiredText('supportPhone')
+        const timezone = requiredText('timezone')
         const ticketName = requiredText('ticketName')
         const ticketPrice = Number(body.ticketPrice)
         const defaultRate = Number(body.defaultCommissionRate)
+        if (!appName || appName.length > 100) return fail(res,400,'Nom de l’application obligatoire (100 caractères maximum).')
+        if (organizationName.length > 160 || supportEmail.length > 254 || supportPhone.length > 40) return fail(res,400,'Les coordonnées de l’application sont trop longues.')
+        if (!['Africa/Conakry','Africa/Dakar','UTC'].includes(timezone)) return fail(res,400,'Fuseau horaire non autorisé.')
         if (!ticketName || ticketName.length > 120) return fail(res,400,'Nom du type de ticket obligatoire (120 caractères maximum).')
         if (!Number.isSafeInteger(ticketPrice) || ticketPrice < 0) return fail(res,400,'Prix de référence invalide.')
         if (!Number.isFinite(defaultRate) || defaultRate < 0 || defaultRate > 100) return fail(res,400,'Taux de commission invalide.')
-        const rows = await sql`insert into public.tm_app_settings (id,ticket_name,ticket_price,default_commission_rate,updated_by,updated_at) values (true,${ticketName},${ticketPrice},${defaultRate},${userId}::uuid,now()) on conflict (id) do update set ticket_name=excluded.ticket_name,ticket_price=excluded.ticket_price,default_commission_rate=excluded.default_commission_rate,updated_by=excluded.updated_by,updated_at=now() returning ticket_name as "ticketName",ticket_price as "ticketPrice",default_commission_rate as "defaultCommissionRate"`
+        const rows = await sql`insert into public.tm_app_settings (id,app_name,organization_name,support_email,support_phone,timezone,ticket_name,ticket_price,default_commission_rate,updated_by,updated_at) values (true,${appName},${organizationName},${supportEmail},${supportPhone},${timezone},${ticketName},${ticketPrice},${defaultRate},${userId}::uuid,now()) on conflict (id) do update set app_name=excluded.app_name,organization_name=excluded.organization_name,support_email=excluded.support_email,support_phone=excluded.support_phone,timezone=excluded.timezone,ticket_name=excluded.ticket_name,ticket_price=excluded.ticket_price,default_commission_rate=excluded.default_commission_rate,updated_by=excluded.updated_by,updated_at=now() returning app_name as "appName",organization_name as "organizationName",support_email as "supportEmail",support_phone as "supportPhone",timezone,ticket_name as "ticketName",ticket_price as "ticketPrice",default_commission_rate as "defaultCommissionRate"`
         return res.status(200).json({ok:true,data:rows[0]})
       }
       case 'sellers': {
@@ -156,11 +164,16 @@ export default async function handler(req: Req, res: Res) {
         if (!['super_admin','admin'].includes(profile.role)) return fail(res, 403, 'Seuls les administrateurs peuvent modifier les commissions')
         const supplierId=requiredText('supplierId'), sellerId=requiredText('sellerId'), rate=Number(body.rate), validFrom=requiredText('validFrom')||date
         if(!supplierId||!sellerId||!Number.isFinite(rate)||rate<0||rate>100) return fail(res,400,'Fournisseur, receveur ou taux invalide')
+        await sql`
+          update public.supplier_receiver_commissions
+          set valid_to=(${validFrom}::date - 1)
+          where supplier_id=${supplierId}::uuid and seller_id=${sellerId}::uuid and valid_from < ${validFrom}::date and (valid_to is null or valid_to >= ${validFrom}::date)
+        `
         const rows=await sql`
           insert into public.supplier_receiver_commissions(supplier_id,seller_id,commission_rate,valid_from,created_by)
           values(${supplierId}::uuid,${sellerId}::uuid,${rate},${validFrom}::date,${userId}::uuid)
           on conflict(supplier_id,seller_id,valid_from)
-          do update set commission_rate=excluded.commission_rate
+          do update set commission_rate=excluded.commission_rate,created_by=excluded.created_by
           returning id, commission_rate as rate
         `
         return res.status(200).json({ok:true,data:rows[0]})
@@ -173,6 +186,8 @@ export default async function handler(req: Req, res: Res) {
         const ticketTypes = await sql`insert into public.ticket_types (name) values (${configuredTicketName}) on conflict (name) do update set name=excluded.name returning id`
         const rateRows = await sql`select commission_rate from public.sellers where id=${sellerId}::uuid and is_active=true`
         if (!rateRows.length) return fail(res, 400, 'Vendeur introuvable ou inactif')
+        const supplierRateRows = await sql`select commission_rate from public.supplier_receiver_commissions where supplier_id=${supplierId}::uuid and seller_id=${sellerId}::uuid and valid_from<=${date}::date and (valid_to is null or valid_to>=${date}::date) order by valid_from desc limit 1`
+        const supplierReceiverRate = supplierRateRows.length ? Number(supplierRateRows[0].commission_rate) : null
         const ref = 'VTE-' + crypto.randomUUID().slice(0, 8).toUpperCase()
         const rows = await sql`
           with available as (
@@ -183,8 +198,8 @@ export default async function handler(req: Req, res: Res) {
             select ${ref},${sellerId}::uuid,${supplierId}::uuid,${date}::date,'validated',${userId}
             from available where qty >= ${quantity} returning id
           ), item as (
-            insert into public.sale_items(sale_id,ticket_type_id,quantity,unit_price,commission_rate)
-            select created.id,${ticketTypes[0].id}::uuid,${quantity},${price},${Number(rateRows[0].commission_rate)} from created returning sale_id
+            insert into public.sale_items(sale_id,ticket_type_id,quantity,unit_price,commission_rate,supplier_receiver_commission_rate)
+            select created.id,${ticketTypes[0].id}::uuid,${quantity},${price},${Number(rateRows[0].commission_rate)},${supplierReceiverRate} from created returning sale_id
           )
           select sale_id as id from item
         `
