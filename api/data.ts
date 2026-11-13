@@ -144,9 +144,12 @@ export default async function handler(req: Req, res: Res) {
         const ticketTypes = await sql`insert into public.ticket_types (name) values (${configuredTicketName}) on conflict (name) do update set name=excluded.name returning id`
         const ref = 'DST-' + crypto.randomUUID().slice(0, 8).toUpperCase()
         const rows = await sql`
-          with available as (
+          with locked_supplier as materialized (
+            select id from public.suppliers where id=${supplierId}::uuid for update
+          ), available as (
             select coalesce((select sum(quantity) from public.ticket_receipts where supplier_id=${supplierId}::uuid and status='validated'),0)
               - coalesce((select sum(di.quantity) from public.distributions d join public.distribution_items di on di.distribution_id=d.id where d.supplier_id=${supplierId}::uuid and d.status='validated'),0) as qty
+            from locked_supplier
           ), created as (
             insert into public.distributions(reference,seller_id,supplier_id,distributed_at,status,created_by)
             select ${ref},${sellerId}::uuid,${supplierId}::uuid,${date}::date,'validated',${userId}::uuid
@@ -190,9 +193,16 @@ export default async function handler(req: Req, res: Res) {
         const supplierReceiverRate = supplierRateRows.length ? Number(supplierRateRows[0].commission_rate) : null
         const ref = 'VTE-' + crypto.randomUUID().slice(0, 8).toUpperCase()
         const rows = await sql`
-          with available as (
+          with locked_pair as materialized (
+            select seller.id
+            from public.sellers seller
+            join public.suppliers supplier on supplier.id=${supplierId}::uuid
+            where seller.id=${sellerId}::uuid and seller.is_active=true
+            for update of seller, supplier
+          ), available as (
             select coalesce((select sum(di.quantity) from public.distributions d join public.distribution_items di on di.distribution_id=d.id where d.seller_id=${sellerId}::uuid and d.supplier_id=${supplierId}::uuid and d.status='validated'),0)
               - coalesce((select sum(si.quantity) from public.sales s join public.sale_items si on si.sale_id=s.id where s.seller_id=${sellerId}::uuid and s.supplier_id=${supplierId}::uuid and s.status='validated'),0) as qty
+            from locked_pair
           ), created as (
             insert into public.sales(reference,seller_id,supplier_id,sold_at,status,created_by)
             select ${ref},${sellerId}::uuid,${supplierId}::uuid,${date}::date,'validated',${userId}
@@ -213,9 +223,12 @@ export default async function handler(req: Req, res: Res) {
         if (!sellerId || !amount || !['cash','bank_transfer','mobile_money','other'].includes(method)) return fail(res, 400, 'Données de reversement invalides')
         const reference = requiredText('reference') || 'REV-' + crypto.randomUUID().slice(0, 8).toUpperCase()
         const result = await sql`
-          with due as (
-            select greatest(0, coalesce(balance_to_remit,0)) as balance
-            from public.seller_financial_summary where seller_id=${sellerId}::uuid
+          with locked_seller as materialized (
+            select id from public.sellers where id=${sellerId}::uuid for update
+          ), due as (
+            select greatest(0, coalesce(summary.balance_to_remit,0)) as balance
+            from public.seller_financial_summary summary
+            join locked_seller on locked_seller.id=summary.seller_id
           ), inserted as (
             insert into public.remittances (reference, seller_id, amount, payment_method, transaction_reference, paid_at, received_by)
             select ${reference}, ${sellerId}::uuid, ${amount}, ${method}, ${requiredText('reference') || null}, ${date}::date, ${userId}::uuid
