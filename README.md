@@ -17,7 +17,11 @@ npm install
 npm run dev
 ```
 
-## Configuration Supabase
-Créer un fichier `.env.local` à partir de `.env.example`, puis renseigner les clés du projet Supabase. Le schéma SQL de base se trouve dans `supabase/schema.sql`.
+## Configuration Neon
+L’application utilise Neon PostgreSQL et Neon Auth (pas Supabase).
 
-Ne jamais placer la clé `service_role` dans le frontend.
+Variables Vercel requises : `DATABASE_URL` côté serveur et `VITE_NEON_AUTH_URL` côté client. `NEON_AUTH_BASE_URL` peut être défini côté serveur pour l’issuer JWT ; `NEON_AUTH_JWKS_URL` est facultatif si l’URL JWKS standard Neon est utilisée.
+
+Le schéma initial se trouve dans `database/neon_schema.sql`, puis les évolutions de stock/fournisseurs dans `database/neon_supplier_stock_migration.sql`. Les profils applicatifs sont stockés dans `public.tm_profiles` et doivent être attribués explicitement par un administrateur. Pour diagnostiquer et activer un compte administrateur précis, utiliser `database/neon_admin_profile_setup.sql` après avoir remplacé l’adresse e-mail de démonstration par l’adresse exacte du compte Neon Auth.
+
+Ne jamais exposer `DATABASE_URL`, un secret Neon ou une clé privée dans le frontend.
