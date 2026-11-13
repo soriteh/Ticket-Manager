@@ -76,7 +76,8 @@ export default async function handler(req: Req, res: Res) {
           rows = await sql`select supplier_id as "supplierId", seller_id as "sellerId", commission_rate as rate, valid_from as "validFrom", valid_to as "validTo" from public.supplier_receiver_commissions where valid_to is null or valid_to >= current_date order by valid_from desc`
           break
         case 'settings': {
-          const configured = await sql`select ticket_name as "ticketName", ticket_price as "ticketPrice", default_commission_rate as "defaultCommissionRate" from public.tm_app_settings where id = true limit 1`
+          let configured: any[] = []
+          try { configured = await sql`select ticket_name as "ticketName", ticket_price as "ticketPrice", default_commission_rate as "defaultCommissionRate" from public.tm_app_settings where id = true limit 1` } catch { configured = [] }
           rows = configured.length ? configured : [{ticketName:'Ticket standard',ticketPrice:5000,defaultCommissionRate:10}]
           break
         }
@@ -130,7 +131,7 @@ export default async function handler(req: Req, res: Res) {
       case 'distributions': {
         const sellerId = requiredText('sellerId'), supplierId = requiredText('supplierId'), quantity = positiveInt('quantity'), price = Number(body.price)
         if (!sellerId || !supplierId || !quantity || !Number.isSafeInteger(price) || price < 0) return fail(res, 400, 'Données de distribution invalides')
-        const ticketTypes = await sql`insert into public.ticket_types (name) values ('Ticket standard') on conflict (name) do update set name=excluded.name returning id`
+        const ticketTypes = await sql`insert into public.ticket_types (name) values ((select ticket_name from public.tm_app_settings where id=true)) on conflict (name) do update set name=excluded.name returning id`
         const ref = 'DST-' + crypto.randomUUID().slice(0, 8).toUpperCase()
         const rows = await sql`
           with available as (
