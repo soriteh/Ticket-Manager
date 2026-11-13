@@ -74,7 +74,7 @@ export default async function handler(req: Req, res: Res) {
       sales_manager: ['sellers', 'suppliers', 'receipts', 'distributions', 'sales', 'commissions'],
       cashier: ['sales', 'remittances'],
       auditor: [],
-      seller: ['sales', 'remittances'],
+      seller: ['sales'],
     }
     if (!(readAccess[profile.role] || []).includes(resource)) {
       return fail(res, 403, 'Votre rôle ne permet pas de consulter cette ressource.')
