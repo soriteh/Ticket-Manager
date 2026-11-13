@@ -78,7 +78,7 @@ export default async function handler(req: Req, res: Res) {
         case 'settings': {
           let configured: any[] = []
           try { configured = await sql`select ticket_name as "ticketName", ticket_price as "ticketPrice", default_commission_rate as "defaultCommissionRate" from public.tm_app_settings where id = true limit 1` } catch { configured = [] }
-          rows = configured.length ? configured : [{ticketName:'Ticket standard',ticketPrice:5000,defaultCommissionRate:10}]
+          rows = configured.length ? configured.map((row:any)=>({...row,canManageSettings:['super_admin','admin'].includes(profile.role)})) : [{ticketName:'Ticket standard',ticketPrice:5000,defaultCommissionRate:10,canManageSettings:['super_admin','admin'].includes(profile.role)}]
           break
         }
         case 'sales':
@@ -166,7 +166,7 @@ export default async function handler(req: Req, res: Res) {
       case 'sales': {
         const sellerId = requiredText('sellerId'), supplierId = requiredText('supplierId'), quantity = positiveInt('quantity'), price = Number(body.price)
         if (!sellerId || !supplierId || !quantity || !Number.isSafeInteger(price) || price < 0) return fail(res, 400, 'Données de vente invalides')
-        const ticketTypes = await sql`insert into public.ticket_types (name) values ('Ticket standard') on conflict (name) do update set name=excluded.name returning id`
+        const ticketTypes = await sql`insert into public.ticket_types (name) values ((select ticket_name from public.tm_app_settings where id=true)) on conflict (name) do update set name=excluded.name returning id`
         const rateRows = await sql`select commission_rate from public.sellers where id=${sellerId}::uuid and is_active=true`
         if (!rateRows.length) return fail(res, 400, 'Vendeur introuvable ou inactif')
         const ref = 'VTE-' + crypto.randomUUID().slice(0, 8).toUpperCase()
