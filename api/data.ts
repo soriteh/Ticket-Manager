@@ -66,7 +66,7 @@ export default async function handler(req: Req, res: Res) {
       sales_manager: ['sellers', 'suppliers', 'receipts', 'distributions', 'sales', 'commissions'],
       cashier: ['sellers', 'sales', 'remittances'],
       auditor: [...resources],
-      seller: ['sellers', 'distributions', 'sales', 'remittances'],
+      seller: ['sellers', 'suppliers', 'distributions', 'sales', 'remittances'],
     }
     const writeAccess: Record<string, string[]> = {
       super_admin: [...resources],
@@ -90,7 +90,7 @@ export default async function handler(req: Req, res: Res) {
           rows = await sql`select id, full_name as name, phone, commission_rate as rate, is_active as active from public.sellers where (${scopedSellerId}::uuid is null or id=${scopedSellerId}::uuid) order by created_at desc`
           break
         case 'suppliers':
-          rows = await sql`select id, name, contact_name as contact, phone, email, address, tax_id as "taxId", is_active as active from public.suppliers order by created_at desc`
+          rows = await sql`select id, name, contact_name as contact, phone, email, address, tax_id as "taxId", is_active as active from public.suppliers where (${scopedSellerId}::uuid is null or id in (select supplier_id from public.distributions where seller_id=${scopedSellerId}::uuid and status='validated')) order by created_at desc`
           break
         case 'receipts':
           rows = await sql`select id, supplier_id as "supplierId", received_at::date::text as date, quantity, unit_cost as "unitCost", reference from public.ticket_receipts where status = 'validated' order by received_at desc`
