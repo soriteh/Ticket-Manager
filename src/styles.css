@@ -569,3 +569,5 @@ button{
 .admin-reset-success{display:flex;align-items:center;gap:10px;margin:14px 0;padding:13px 16px;border:1px solid #a8dfc1;border-radius:10px;background:#effaf3;color:#176b3b;font-size:12px;font-weight:600}
 .admin-table td:last-child{min-width:190px}
 @media(max-width:760px){.admin-reset-button{white-space:normal;text-align:center}}
+
+.settings-save-panel{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:18px 20px;margin-top:16px}.settings-save-panel b{display:block;color:#20334d;font:800 13px Manrope}.settings-save-panel p{margin:6px 0 0;color:#8390a3;font-size:11px;line-height:1.6}.settings-save-panel .muted{font-size:11px;color:#64748b}@media(max-width:600px){.settings-save-panel{align-items:stretch;flex-direction:column}.settings-save-panel .btn-primary{width:100%}}
