@@ -43,6 +43,29 @@ create table if not exists public.tm_app_settings (
   updated_at timestamptz not null default now()
 );
 
+-- Liaison facultative entre un profil Neon Auth et sa fiche vendeur.
+-- Les profils existants (dont le Super Admin) restent non associés par défaut.
+alter table public.tm_profiles
+  add column if not exists seller_id uuid;
+
+do $
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'tm_profiles_seller_id_fkey'
+      and conrelid = 'public.tm_profiles'::regclass
+  ) then
+    alter table public.tm_profiles
+      add constraint tm_profiles_seller_id_fkey
+      foreign key (seller_id) references public.sellers(id) on delete restrict;
+  end if;
+end
+$;
+
+create unique index if not exists tm_profiles_seller_id_unique
+  on public.tm_profiles(seller_id)
+  where seller_id is not null;
+
 alter table public.tm_app_settings
   add column if not exists organization_name text not null default '',
   add column if not exists support_email text not null default '',
