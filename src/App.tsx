@@ -92,17 +92,11 @@ function AdminConsole({onBack}:{onBack:()=>void}){
 
 
 function ProfilePage({onBack}:{onBack:()=>void}){
- const [fullName,setFullName]=useState('')
- const [phone,setPhone]=useState('')
- const [email,setEmail]=useState('')
- const [role,setRole]=useState('')
- const [loading,setLoading]=useState(true)
- const [saving,setSaving]=useState(false)
- const [message,setMessage]=useState('')
- const [error,setError]=useState('')
+ const [form,setForm]=useState({fullName:'',phone:'',email:'',role:'',dateOfBirth:'',address:'',city:'',country:'Guinée',jobTitle:'',department:'',employeeCode:'',avatarUrl:'',preferredLanguage:'fr',theme:'light',emailNotifications:true})
+ const [loading,setLoading]=useState(true),[saving,setSaving]=useState(false),[message,setMessage]=useState(''),[error,setError]=useState('')
+ const update=(key:string,value:string|boolean)=>setForm(old=>({...old,[key]:value}))
  async function request(method:'GET'|'PATCH',body?:Record<string,unknown>){
-  const raw=String(import.meta.env.VITE_NEON_AUTH_URL||'')
-  const base=raw.endsWith('/')?raw.slice(0,-1):raw
+  const raw=String(import.meta.env.VITE_NEON_AUTH_URL||''),base=raw.endsWith('/')?raw.slice(0,-1):raw
   if(!base)throw new Error('URL Neon Auth absente de la configuration.')
   const tokenResponse=await fetch(base+'/token',{credentials:'include',cache:'no-store',headers:{Accept:'application/json'}})
   const tokenData=await tokenResponse.json().catch(()=>null)
@@ -113,9 +107,33 @@ function ProfilePage({onBack}:{onBack:()=>void}){
   if(!response.ok||!data?.ok)throw new Error(data?.error||'Opération impossible.')
   return data
  }
- useEffect(()=>{let alive=true;(async()=>{try{const data=await request('GET');if(!alive)return;setFullName(data.data.fullName||'');setPhone(data.data.phone||'');setEmail(data.data.email||'');setRole(data.data.role||'')}catch(e){if(alive)setError(e instanceof Error?e.message:'Chargement du profil impossible')}finally{if(alive)setLoading(false)}})();return()=>{alive=false}},[])
- async function save(e:React.FormEvent<HTMLFormElement>){e.preventDefault();setSaving(true);setMessage('');setError('');try{await request('PATCH',{fullName,phone});setMessage('Votre profil a été mis à jour.')}catch(e){setError(e instanceof Error?e.message:'Enregistrement impossible.')}finally{setSaving(false)}}
- return <main className="profile-page"><div className="profile-page-top"><button className="profile-back" onClick={onBack}>← Retour à l’application</button><span>ESPACE PERSONNEL</span></div><section className="profile-card-frame"><div className="profile-card"><div className="profile-page-heading"><div className="profile-page-avatar">{(fullName||email||'U').trim().slice(0,1).toUpperCase()}</div><div><span className="profile-kicker">MON COMPTE</span><h1>Mon profil</h1><p>Consultez et mettez à jour vos informations personnelles.</p></div></div>{loading?<div className="profile-loading">Chargement de votre profil…</div>:<form className="profile-form" onSubmit={save}><label>Nom complet<input required maxLength={120} value={fullName} onChange={e=>setFullName(e.target.value)} placeholder="Votre nom et prénom"/></label><label>Numéro de téléphone<input maxLength={30} value={phone} onChange={e=>setPhone(e.target.value)} placeholder="+224 …"/></label><label>Adresse e-mail<input value={email} readOnly disabled/></label><div className="profile-readonly">Rôle du compte <b>{role==='super_admin'?'Super administrateur':role==='admin'?'Administrateur':role==='sales_manager'?'Responsable commercial':role==='cashier'?'Caissier':role==='seller'?'Vendeur':role==='auditor'?'Auditeur':role||'Non défini'}</b><small>Le rôle et les permissions sont gérés par l’administration.</small></div>{error&&<p className="profile-error" role="alert">{error}</p>}{message&&<p className="profile-success" role="status">{message}</p>}<div className="profile-form-actions"><button type="button" className="profile-cancel" onClick={onBack}>Annuler</button><button type="submit" disabled={saving}>{saving?'Enregistrement…':'Enregistrer les modifications'}</button></div></form>}</div></section></main>
+ useEffect(()=>{let alive=true;(async()=>{try{const d=await request('GET');if(!alive)return;setForm(old=>({...old,...d.data,avatarUrl:d.data.avatarUrl||'',dateOfBirth:d.data.dateOfBirth?String(d.data.dateOfBirth).slice(0,10):'',preferredLanguage:d.data.preferredLanguage||'fr',theme:d.data.theme||'light',emailNotifications:d.data.emailNotifications??true}))}catch(e){if(alive)setError(e instanceof Error?e.message:'Chargement du profil impossible')}finally{if(alive)setLoading(false)}})();return()=>{alive=false}},[])
+ async function save(e:React.FormEvent<HTMLFormElement>){e.preventDefault();setSaving(true);setMessage('');setError('');try{await request('PATCH',form);setMessage('Votre profil a été mis à jour avec succès.')}catch(e){setError(e instanceof Error?e.message:'Enregistrement impossible.')}finally{setSaving(false)}}
+ async function photo(e:React.ChangeEvent<HTMLInputElement>){const file=e.target.files?.[0];if(!file)return;if(!['image/png','image/jpeg','image/webp'].includes(file.type)){setError('Format accepté : PNG, JPG ou WebP.');return}if(file.size>1500*1024){setError('La photo doit faire 1,5 Mo maximum.');return}const reader=new FileReader();reader.onload=()=>update('avatarUrl',String(reader.result||''));reader.readAsDataURL(file)}
+ const roleLabel=({super_admin:'Super administrateur',admin:'Administrateur',sales_manager:'Responsable commercial',cashier:'Caissier',seller:'Vendeur',auditor:'Auditeur'} as Record<string,string>)[form.role]||form.role||'Non défini'
+ return <main className="profile-page"><div className="profile-page-top"><button className="profile-back" onClick={onBack}>← Retour à l’application</button><span>ESPACE PERSONNEL</span></div><section className="profile-card-frame"><div className="profile-card"><div className="profile-page-heading"><label className="profile-photo-control">{form.avatarUrl?<img src={form.avatarUrl} alt="Photo de profil"/>:<span>{(form.fullName||form.email||'U').trim().slice(0,1).toUpperCase()}</span>}<input type="file" accept="image/png,image/jpeg,image/webp" onChange={photo}/><small>Modifier</small></label><div><span className="profile-kicker">MON COMPTE</span><h1>Mon profil</h1><p>Gérez vos informations personnelles, professionnelles et préférences.</p></div></div>{loading?<div className="profile-loading">Chargement de votre profil…</div>:<form className="profile-form" onSubmit={save}>
+ <h2 className="profile-section-title">Informations personnelles</h2>
+ <label>Nom complet<input required maxLength={120} value={form.fullName} onChange={e=>update('fullName',e.target.value)} placeholder="Votre nom et prénom"/></label>
+ <label>Date de naissance<input type="date" value={form.dateOfBirth} onChange={e=>update('dateOfBirth',e.target.value)}/></label>
+ <label>Téléphone<input maxLength={30} value={form.phone||''} onChange={e=>update('phone',e.target.value)} placeholder="+224 …"/></label>
+ <label>Adresse e-mail<input value={form.email||''} readOnly disabled/></label>
+ <label className="profile-wide">Adresse<input maxLength={240} value={form.address||''} onChange={e=>update('address',e.target.value)} placeholder="Quartier, rue, repère…"/></label>
+ <label>Ville<input maxLength={100} value={form.city||''} onChange={e=>update('city',e.target.value)} placeholder="Conakry"/></label>
+ <label>Pays<input maxLength={100} value={form.country||''} onChange={e=>update('country',e.target.value)}/></label>
+ <h2 className="profile-section-title">Informations professionnelles</h2>
+ <label>Fonction<input maxLength={120} value={form.jobTitle||''} onChange={e=>update('jobTitle',e.target.value)} placeholder="Ex. Responsable commercial"/></label>
+ <label>Service / Département<input maxLength={120} value={form.department||''} onChange={e=>update('department',e.target.value)} placeholder="Ex. Administration"/></label>
+ <label>Matricule<input maxLength={60} value={form.employeeCode||''} onChange={e=>update('employeeCode',e.target.value)} placeholder="Matricule interne"/></label>
+ <div className="profile-readonly">Rôle et permissions<b>{roleLabel}</b><small>Ces paramètres sont gérés exclusivement par l’administration.</small></div>
+ <h2 className="profile-section-title">Préférences</h2>
+ <label>Langue<select value={form.preferredLanguage} onChange={e=>update('preferredLanguage',e.target.value)}><option value="fr">Français</option><option value="en">English</option></select></label>
+ <label>Thème<select value={form.theme} onChange={e=>update('theme',e.target.value)}><option value="light">Clair</option><option value="dark">Sombre</option></select></label>
+ <label className="profile-toggle"><input type="checkbox" checked={!!form.emailNotifications} onChange={e=>update('emailNotifications',e.target.checked)}/> Recevoir les notifications par e-mail</label>
+ <h2 className="profile-section-title">Sécurité du compte</h2>
+ <div className="profile-readonly profile-wide">Adresse e-mail et mot de passe<small>La gestion des identifiants est assurée par Neon Auth. Utilisez la procédure sécurisée de réinitialisation du mot de passe depuis l’écran de connexion.</small></div>
+ {error&&<p className="profile-error" role="alert">{error}</p>}{message&&<p className="profile-success" role="status">{message}</p>}
+ <div className="profile-form-actions"><button type="button" className="profile-cancel" onClick={onBack}>Annuler</button><button type="submit" disabled={saving}>{saving?'Enregistrement…':'Enregistrer les modifications'}</button></div>
+ </form>}</div></section></main>
 }
 
 function Dashboard(){
