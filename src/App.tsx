@@ -92,6 +92,29 @@ function AdminConsole({onBack}:{onBack:()=>void}){
 
 function Dashboard(){
  const [tab,setTab]=useState<Tab>('dashboard'),[mobile,setMobile]=useState(false),[query,setQuery]=useState(''),[notice,setNotice]=useState(''),[adminOpen,setAdminOpen]=useState(false),[notificationsOpen,setNotificationsOpen]=useState(false),[profileOpen,setProfileOpen]=useState(false)
+ useEffect(()=>{
+  if(!notificationsOpen&&!profileOpen)return
+  const handleOutside=(event:PointerEvent)=>{
+   const target=event.target
+   if(target instanceof Element&&!target.closest('.top-menu-wrap')){
+    setNotificationsOpen(false)
+    setProfileOpen(false)
+   }
+  }
+  const handleEscape=(event:KeyboardEvent)=>{
+   if(event.key==='Escape'){
+    setNotificationsOpen(false)
+    setProfileOpen(false)
+   }
+  }
+  document.addEventListener('pointerdown',handleOutside)
+  document.addEventListener('keydown',handleEscape)
+  return()=>{
+   document.removeEventListener('pointerdown',handleOutside)
+   document.removeEventListener('keydown',handleEscape)
+  }
+ },[notificationsOpen,profileOpen])
+
  const [sellers,setSellers]=useState<Seller[]>([]),[suppliers,setSuppliers]=useState<Supplier[]>([]),[receipts,setReceipts]=useState<Receipt[]>([]),[distributions,setDistributions]=useState<Distribution[]>([]),[sales,setSales]=useState<Sale[]>([]),[remittances,setRemittances]=useState<Remittance[]>([])
  const [loadingData,setLoadingData]=useState(true)
  useEffect(()=>{let alive=true;(async()=>{try{const [a,b,d,e,g,h,i]=await Promise.all([dataApi('sellers'),dataApi('suppliers'),dataApi('receipts'),dataApi('distributions'),dataApi('sales'),dataApi('remittances'),dataApi('commissions')]);if(!alive)return;setSellers(a);setSuppliers(b);setReceipts(d);setDistributions(e);setSales(g);setRemittances(h);setPairRates(Object.fromEntries(i.map((x:any)=>[x.supplierId+'|'+x.sellerId,String(x.rate)])))}catch(err){if(alive)setNotice(err instanceof Error?err.message:'Chargement des données impossible')}finally{if(alive)setLoadingData(false)}})();return()=>{alive=false}},[])
