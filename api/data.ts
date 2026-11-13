@@ -50,7 +50,8 @@ export default async function handler(req: Req, res: Res) {
       select role, is_active from public.tm_profiles where user_id = ${userId}::uuid limit 1
     `
     const profile = profiles[0] as { role: string; is_active: boolean } | undefined
-    if (!profile || !profile.is_active) return fail(res, 403, 'Compte sans profil actif. Contactez le super administrateur.')
+    if (!profile) return fail(res, 403, 'PROFIL_ABSENT: aucun profil applicatif n’est associé à ce compte Neon Auth. Un administrateur doit créer son entrée dans tm_profiles.')
+    if (!profile.is_active) return fail(res, 403, 'PROFIL_INACTIF: ce compte est désactivé dans tm_profiles. Un administrateur doit vérifier is_active.')
     const readRoles = ['super_admin', 'admin', 'sales_manager', 'cashier', 'seller', 'auditor']
     const writeRoles = ['super_admin', 'admin', 'sales_manager', 'cashier']
     if (!readRoles.includes(profile.role)) return fail(res, 403, 'Accès refusé')
