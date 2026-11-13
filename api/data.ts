@@ -73,7 +73,7 @@ export default async function handler(req: Req, res: Res) {
           rows = await sql`select d.id, d.seller_id as "sellerId", d.supplier_id as "supplierId", d.distributed_at::date::text as date, di.quantity, di.reference_unit_price as price, 'Validée' as status from public.distributions d join public.distribution_items di on di.distribution_id=d.id where d.status='validated' order by d.distributed_at desc`
           break
         case 'commissions':
-          rows = await sql`select distinct on (supplier_id,seller_id) supplier_id as "supplierId", seller_id as "sellerId", commission_rate as rate, valid_from as "validFrom", valid_to as "validTo" from public.supplier_receiver_commissions where valid_to is null or valid_to >= current_date order by supplier_id,seller_id,valid_from desc`
+          rows = await sql`select distinct on (supplier_id,seller_id) supplier_id as "supplierId", seller_id as "sellerId", commission_rate as rate, valid_from as "validFrom", valid_to as "validTo" from public.supplier_receiver_commissions where valid_from <= current_date and (valid_to is null or valid_to >= current_date) order by supplier_id,seller_id,valid_from desc`
           break
         case 'settings': {
           let configured: any[] = []
