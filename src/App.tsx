@@ -41,8 +41,47 @@ async function dataApi(resource:string, method:'GET'|'POST'='GET', body?:Record<
  return result.data??result
 }
 
+
+type AdminUser={id:string;email:string;name?:string;fullName?:string;role:string;isActive:boolean}
+function AdminConsole({onBack}:{onBack:()=>void}){
+ const [users,setUsers]=useState<AdminUser[]>([]),[loading,setLoading]=useState(true),[error,setError]=useState(''),[busy,setBusy]=useState('')
+ async function call(method:'GET'|'PATCH',body?:Record<string,unknown>){
+  const raw=String(import.meta.env.VITE_NEON_AUTH_URL||''),url=raw.endsWith('/')?raw.slice(0,-1):raw
+  const tokenRes=await fetch(url+'/token',{credentials:'include',cache:'no-store'})
+  const tokenData=await tokenRes.json().catch(()=>null)
+  const token=tokenData?.token||tokenData?.access_token||tokenData?.data?.token||tokenData?.data?.access_token||tokenData?.session?.access_token
+  if(!token)throw new Error('Session Neon introuvable. Reconnectez-vous.')
+  const res=await fetch('/api/admin-users',{method,headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})})
+  const data=await res.json().catch(()=>({}))
+  if(!res.ok||!data.ok)throw new Error(data.error||'Erreur de gestion des utilisateurs.')
+  return data.data
+ }
+ async function refresh(){setLoading(true);setError('');try{setUsers(await call('GET'))}catch(e){setError(e instanceof Error?e.message:'Chargement impossible')}finally{setLoading(false)}}
+ useEffect(()=>{void refresh()},[])
+ async function update(user:AdminUser,change:Record<string,unknown>){setBusy(user.id);setError('');try{await call('PATCH',{userId:user.id,...change});await refresh()}catch(e){setError(e instanceof Error?e.message:'Modification impossible')}finally{setBusy('')}}
+ const roles=['admin','sales_manager','cashier','seller','auditor']
+ return <main style={{minHeight:'100vh',background:'#f3f6fb',padding:24,fontFamily:'Inter,Arial,sans-serif',color:'#17243a'}}>
+  <div style={{maxWidth:1180,margin:'0 auto'}}>
+   <button onClick={onBack} style={{border:0,background:'transparent',color:'#0057b9',fontWeight:700,cursor:'pointer',padding:'8px 0'}}>← Retour à l’espace de gestion</button>
+   <header style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:16,flexWrap:'wrap',margin:'18px 0 24px'}}>
+    <div><p style={{color:'#0057b9',fontSize:12,fontWeight:800,letterSpacing:1.5,margin:0}}>CONSOLE DE CONTRÔLE</p><h1 style={{margin:'6px 0',fontSize:30}}>Espace administrateur</h1><p style={{color:'#64748b',margin:0}}>Gestion des comptes, des rôles et des autorisations.</p></div>
+    <button onClick={()=>void refresh()} style={{padding:'11px 16px',borderRadius:9,border:'1px solid #cbd5e1',background:'#fff',cursor:'pointer'}}>Actualiser</button>
+   </header>
+   <section style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:14,marginBottom:20}}>
+    {[['Comptes',users.length],['Actifs',users.filter(u=>u.isActive).length],['Inactifs',users.filter(u=>!u.isActive).length],['Administrateurs',users.filter(u=>['admin','super_admin'].includes(u.role)).length]].map(([k,v])=><div key={String(k)} style={{background:'#fff',padding:20,borderRadius:14,border:'1px solid #e3eaf3'}}><div style={{color:'#64748b',fontSize:13}}>{k}</div><strong style={{fontSize:28}}>{v}</strong></div>)}
+   </section>
+   {error&&<div role="alert" style={{background:'#fff1f0',color:'#b42318',padding:14,borderRadius:10,marginBottom:16}}>{error}</div>}
+   <section style={{background:'#fff',border:'1px solid #e3eaf3',borderRadius:14,overflow:'hidden'}}>
+    <div style={{padding:18,borderBottom:'1px solid #e8edf4'}}><h2 style={{fontSize:18,margin:0}}>Utilisateurs et permissions</h2><p style={{color:'#64748b',fontSize:13,margin:'5px 0 0'}}>Les nouveaux comptes sans profil ne disposent d’aucun accès métier avant attribution d’un rôle.</p></div>
+    {loading?<p style={{padding:24,color:'#64748b'}}>Chargement des comptes…</p>:<div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',minWidth:760}}><thead><tr>{['UTILISATEUR','ADRESSE E-MAIL','RÔLE','STATUT','ACTIONS'].map(x=><th key={x} style={{textAlign:'left',padding:14,fontSize:11,color:'#64748b',background:'#f8fafc'}}>{x}</th>)}</tr></thead><tbody>{users.map(u=><tr key={u.id} style={{borderTop:'1px solid #edf1f6'}}><td style={{padding:14,fontWeight:650}}>{u.fullName||u.name||'Utilisateur'}</td><td style={{padding:14}}>{u.email}</td><td style={{padding:14}}>{u.role==='sans_profil'?<span style={{color:'#b45309'}}>Sans profil</span>:<select aria-label={'Rôle de '+u.email} disabled={busy===u.id} value={u.role} onChange={e=>void update(u,{role:e.target.value})} style={{padding:8,border:'1px solid #cbd5e1',borderRadius:7}}>{roles.map(r=><option key={r} value={r}>{r}</option>)}</select>}</td><td style={{padding:14}}><span style={{color:u.isActive?'#067647':'#b42318'}}>{u.isActive?'Actif':'Inactif'}</span></td><td style={{padding:14}}><button disabled={busy===u.id||u.role==='sans_profil'} onClick={()=>void update(u,{isActive:!u.isActive})} style={{padding:'8px 11px',borderRadius:7,border:'1px solid #cbd5e1',background:'#fff',cursor:'pointer'}}>{busy===u.id?'…':u.isActive?'Désactiver':'Activer'}</button></td></tr>)}</tbody></table>{users.length===0&&<p style={{padding:20,color:'#64748b'}}>Aucun compte trouvé.</p>}</div>}
+   </section>
+   <p style={{fontSize:12,color:'#64748b',marginTop:14}}>Les changements sont enregistrés dans Neon. Les contrôles d’autorisation sont appliqués côté serveur.</p>
+  </div>
+ </main>
+}
+
 function Dashboard(){
- const [tab,setTab]=useState<Tab>('dashboard'),[mobile,setMobile]=useState(false),[query,setQuery]=useState(''),[notice,setNotice]=useState('')
+ const [tab,setTab]=useState<Tab>('dashboard'),[mobile,setMobile]=useState(false),[query,setQuery]=useState(''),[notice,setNotice]=useState(''),[adminOpen,setAdminOpen]=useState(false)
  const [sellers,setSellers]=useState<Seller[]>([]),[suppliers,setSuppliers]=useState<Supplier[]>([]),[receipts,setReceipts]=useState<Receipt[]>([]),[distributions,setDistributions]=useState<Distribution[]>([]),[sales,setSales]=useState<Sale[]>([]),[remittances,setRemittances]=useState<Remittance[]>([])
  const [loadingData,setLoadingData]=useState(true)
  useEffect(()=>{let alive=true;(async()=>{try{const [a,b,d,e,g,h,i]=await Promise.all([dataApi('sellers'),dataApi('suppliers'),dataApi('receipts'),dataApi('distributions'),dataApi('sales'),dataApi('remittances'),dataApi('commissions')]);if(!alive)return;setSellers(a);setSuppliers(b);setReceipts(d);setDistributions(e);setSales(g);setRemittances(h);setPairRates(Object.fromEntries(i.map((x:any)=>[x.supplierId+'|'+x.sellerId,String(x.rate)])))}catch(err){if(alive)setNotice(err instanceof Error?err.message:'Chargement des données impossible')}finally{if(alive)setLoadingData(false)}})();return()=>{alive=false}},[])
@@ -52,6 +91,7 @@ function Dashboard(){
  const [supplierForm,setSupplierForm]=useState({name:'',contact:'',phone:'',email:'',address:'',taxId:''})
  const [opForm,setOpForm]=useState({sellerId:'',supplierId:'',date:today(),quantity:'',price:'5000',unitCost:'',method:'Espèces',reference:''})
  const title=nav.find(x=>x.id===tab)?.label||'Ticket Manager'
+ if(adminOpen)return <AdminConsole onBack={()=>setAdminOpen(false)}/>
  const activeSellers=sellers.filter(s=>s.active)
  const totals=useMemo(()=>{const validSales=sales.filter(x=>x.status==='Validée'),validDist=distributions.filter(x=>x.status==='Validée');const revenue=validSales.reduce((a,x)=>a+x.quantity*x.price,0);const commission=validSales.reduce((a,x)=>a+x.quantity*x.price*(sellers.find(s=>s.id===x.sellerId)?.rate||0)/100,0);const remitted=remittances.reduce((a,x)=>a+x.amount,0);return {revenue,commission,remitted,distributed:validDist.reduce((a,x)=>a+x.quantity,0),sold:validSales.reduce((a,x)=>a+x.quantity,0),balance:revenue-commission-remitted}},[sales,distributions,remittances,sellers])
  const filteredSellers=useMemo(()=>sellers.filter(s=>(s.name+' '+s.phone).toLowerCase().includes(query.toLowerCase())),[sellers,query])
@@ -94,7 +134,7 @@ function Dashboard(){
  const sellerName=(id:string)=>sellers.find(s=>s.id===id)?.name||'Vendeur supprimé'
  const table=(headers:string[],rows:React.ReactNode[],empty:string)=><div className="table-wrap"><table><thead><tr>{headers.map(h=><th key={h}>{h}</th>)}</tr></thead><tbody>{rows}</tbody></table>{rows.length===0&&<div className="empty">{empty}</div>}</div>
  return <div className="app-shell">
- <aside className={mobile?'sidebar open':'sidebar'}><div className="brand"><div className="brand-mark">T</div><div><b>Ticket Manager</b><small>GESTION COMMERCIALE</small></div><button className="mobile-close" onClick={()=>setMobile(false)}><X size={18}/></button></div><div className="workspace"><span className="workspace-dot"/><div><b>Espace administration</b><small>Environnement de travail</small></div><ChevronDown size={15}/></div><p className="nav-label">MENU PRINCIPAL</p><nav>{nav.map(n=><button key={n.id} className={tab===n.id?'nav-item active':'nav-item'} onClick={()=>{setTab(n.id);setMobile(false)}}><n.icon size={18}/><span>{n.label}</span></button>)}</nav><div className="sidebar-bottom"><div className="help-card"><div className="help-icon">?</div><b>Centre d’aide</b><p>Consultez les consignes de gestion des tickets et reversements.</p><button onClick={()=>setTab('reports')}>Voir les rapports <ArrowUpRight size={14}/></button></div><div className="profile"><div className="avatar">SA</div><div><b>Compte connecté</b><small>Administrateur</small></div><MoreHorizontal size={18}/></div></div></aside>
+ <aside className={mobile?'sidebar open':'sidebar'}><div className="brand"><div className="brand-mark">T</div><div><b>Ticket Manager</b><small>GESTION COMMERCIALE</small></div><button className="mobile-close" onClick={()=>setMobile(false)}><X size={18}/></button></div><button type="button" className="workspace" onClick={()=>{setAdminOpen(true);setMobile(false)}} aria-label="Ouvrir l’espace administrateur"><span className="workspace-dot"/><div><b>Espace administrateur</b><small>Comptes, rôles et permissions</small></div><ChevronDown size={15}/></button><p className="nav-label">MENU PRINCIPAL</p><nav>{nav.map(n=><button key={n.id} className={tab===n.id?'nav-item active':'nav-item'} onClick={()=>{setTab(n.id);setMobile(false)}}><n.icon size={18}/><span>{n.label}</span></button>)}</nav><div className="sidebar-bottom"><div className="help-card"><div className="help-icon">?</div><b>Centre d’aide</b><p>Consultez les consignes de gestion des tickets et reversements.</p><button onClick={()=>setTab('reports')}>Voir les rapports <ArrowUpRight size={14}/></button></div><div className="profile"><div className="avatar">SA</div><div><b>Compte connecté</b><small>Administrateur</small></div><MoreHorizontal size={18}/></div></div></aside>
  {mobile&&<div className="scrim" onClick={()=>setMobile(false)}/>}
  <main className="main"><header className="topbar"><div className="top-left"><button className="menu-btn" onClick={()=>setMobile(true)}><Menu/></button><div><span className="crumb">Espace de gestion</span><h1>{title}</h1></div></div><div className="top-actions"><div className="date-pill"><CalendarDays size={16}/> {new Intl.DateTimeFormat('fr-FR',{dateStyle:'long'}).format(new Date())}</div><button className="icon-btn" aria-label="Notifications" onClick={()=>notify('Aucune nouvelle notification.') }><Bell size={19}/></button><button className="icon-btn" aria-label="Déconnexion" title="Déconnexion" onClick={()=>void authClient.signOut()}><LogOut size={18}/></button><div className="top-avatar">SA</div></div></header>
  <div className="content"><div className="notice"><AlertCircle size={15}/><span>Mode en ligne requis : la connexion à Neon doit être opérationnelle pour enregistrer et recharger les données. Aucune sauvegarde locale n’est utilisée.</span><button onClick={()=>setNotice('')}>×</button></div>{notice&&<div className="notice notice-success"><CheckCircle2 size={15}/>{notice}<button onClick={()=>setNotice('')}>×</button></div>}
