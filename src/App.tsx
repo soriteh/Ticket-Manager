@@ -181,7 +181,8 @@ function Dashboard(){
  const [sellerForm,setSellerForm]=useState({name:'',phone:'',rate:'10'})
  const [supplierForm,setSupplierForm]=useState({name:'',contact:'',phone:'',email:'',address:'',taxId:''})
  const [opForm,setOpForm]=useState({sellerId:'',supplierId:'',date:today(),quantity:'',price:'5000',unitCost:'',method:'Espèces',reference:''})
- const visibleNav=userRole==='seller'?nav.filter(x=>['sales','distributions','remittances'].includes(x.id)):nav
+ const roleTabs:Record<string,Tab[]>={super_admin:nav.map(x=>x.id),admin:nav.map(x=>x.id),sales_manager:['dashboard','sellers','suppliers','receipts','distributions','sales','commissions','reports'],cashier:['dashboard','sellers','sales','remittances','reports'],seller:['sellers','distributions','sales','remittances'],auditor:['dashboard','sellers','suppliers','receipts','distributions','sales','commissions','remittances','reports','settings']}
+ const visibleNav=nav.filter(x=>(roleTabs[userRole]||[]).includes(x.id))
  const title=nav.find(x=>x.id===tab)?.label||'Ticket Manager'
  const activeSellers=sellers.filter(s=>s.active)
  const totals=useMemo(()=>{const validSales=sales.filter(x=>x.status==='Validée'),validDist=distributions.filter(x=>x.status==='Validée');const revenue=validSales.reduce((a,x)=>a+x.quantity*x.price,0);const commission=validSales.reduce((a,x)=>a+x.quantity*x.price*(x.commissionRate??0)/100,0);const remitted=remittances.reduce((a,x)=>a+x.amount,0);return {revenue,commission,remitted,distributed:validDist.reduce((a,x)=>a+x.quantity,0),sold:validSales.reduce((a,x)=>a+x.quantity,0),balance:revenue-commission-remitted}},[sales,distributions,remittances,sellers])
