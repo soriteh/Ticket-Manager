@@ -240,3 +240,30 @@ input:focus{transition:border-color .18s ease,box-shadow .18s ease;box-shadow:0 
 @keyframes adminCircuitDrift{from{background-position:0 0,0 0,0 0}to{background-position:108px 54px,-54px 108px,180px 180px}}
 @keyframes adminGlowShift{0%{transform:translate3d(-1%,0,0) scale(1)}100%{transform:translate3d(1.5%,1%,0) scale(1.08)}}
 @media(prefers-reduced-motion:reduce){.admin-console:before,.admin-console:after{animation:none!important}}
+
+/* Flux d'électrons : impulsions lumineuses qui parcourent les pistes */
+.admin-console:before{
+ background-image:
+  radial-gradient(circle,rgba(120,211,255,.98) 0 1.6px,rgba(40,153,255,.45) 2px,transparent 4px),
+  radial-gradient(circle,rgba(255,157,75,.95) 0 1.5px,rgba(255,120,0,.38) 2px,transparent 4px),
+  radial-gradient(circle,rgba(94,190,255,.9) 0 1.3px,transparent 3.5px),
+  linear-gradient(90deg,rgba(76,164,255,.16) 1px,transparent 1px),
+  linear-gradient(rgba(76,164,255,.12) 1px,transparent 1px),
+  linear-gradient(135deg,transparent 48.8%,rgba(255,132,43,.32) 49.5%,rgba(255,132,43,.32) 50%,transparent 50.7%);
+ background-size:180px 120px,240px 170px,310px 210px,54px 54px,54px 54px,180px 180px;
+ background-position:0 0,70px 30px,140px 80px,0 0,0 0,0 0;
+ opacity:.55;
+ animation:adminElectronFlow 12s linear infinite;
+}
+.admin-console:after{
+ background:linear-gradient(90deg,transparent 0%,rgba(56,167,255,0) 35%,rgba(76,190,255,.16) 49%,rgba(255,143,61,.2) 51%,rgba(56,167,255,0) 65%,transparent 100%);
+ background-size:220% 100%;
+ filter:blur(9px);
+ animation:adminCurrentSweep 9s linear infinite,adminGlowShift 16s ease-in-out infinite alternate;
+}
+@keyframes adminElectronFlow{
+ 0%{background-position:0 0,70px 30px,140px 80px,0 0,0 0,0 0}
+ 100%{background-position:180px 120px,-170px 200px,450px -130px,54px 54px,-54px 108px,180px 180px}
+}
+@keyframes adminCurrentSweep{from{background-position:120% 0}to{background-position:-120% 0}}
+@media(prefers-reduced-motion:reduce){.admin-console:before,.admin-console:after{animation:none!important}}
