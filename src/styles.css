@@ -326,3 +326,20 @@ input:focus{transition:border-color .18s ease,box-shadow .18s ease;box-shadow:0 
 @media(prefers-reduced-motion:reduce){
   .app-shell::before,.app-shell::after{animation:none!important}
 }
+
+
+/* Lisibilité des pages de gestion : Electron Flow reste en arrière-plan */
+.app-shell>.main{
+  background:rgba(247,250,254,.96)!important;
+  color:#17243a;
+}
+.app-shell>.main>.content{
+  position:relative;
+  z-index:1;
+  background:transparent;
+}
+.app-shell>.main .welcome h2,
+.app-shell>.main .panel-head h3,
+.app-shell>.main .module-panel h3{
+  color:#15243b;
+}
