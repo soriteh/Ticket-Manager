@@ -16,7 +16,7 @@ type Res = {
 const authBaseUrl = process.env.NEON_AUTH_BASE_URL || process.env.VITE_NEON_AUTH_URL
 const jwksUrl = process.env.NEON_AUTH_JWKS_URL || (authBaseUrl ? new URL('.well-known/jwks.json', authBaseUrl.endsWith('/') ? authBaseUrl : authBaseUrl + '/').toString() : '')
 const jwks = jwksUrl ? createRemoteJWKSet(new URL(jwksUrl)) : null
-const resources = new Set(['sellers', 'suppliers', 'receipts', 'distributions', 'sales', 'remittances', 'commissions', 'settings'])
+const resources = new Set(['me', 'sellers', 'suppliers', 'receipts', 'distributions', 'sales', 'remittances', 'commissions', 'settings'])
 
 function fail(res: Res, status: number, error: string) {
   return res.status(status).json({ ok: false, error })
@@ -47,11 +47,17 @@ export default async function handler(req: Req, res: Res) {
   const sql = neon(process.env.DATABASE_URL)
   try {
     const profiles = await sql`
-      select role, is_active from public.tm_profiles where user_id = ${userId}::uuid limit 1
+      select role, is_active, seller_id from public.tm_profiles where user_id = ${userId}::uuid limit 1
     `
-    const profile = profiles[0] as { role: string; is_active: boolean } | undefined
+    const profile = profiles[0] as { role: string; is_active: boolean; seller_id: string | null } | undefined
     if (!profile) return fail(res, 403, 'PROFIL_ABSENT: aucun profil applicatif n’est associé à ce compte Neon Auth. Un administrateur doit créer son entrée dans tm_profiles.')
     if (!profile.is_active) return fail(res, 403, 'PROFIL_INACTIF: ce compte est désactivé dans tm_profiles. Un administrateur doit vérifier is_active.')
+    if (resource === 'me') {
+      if (req.method !== 'GET') return fail(res, 405, 'Méthode non autorisée pour le profil courant')
+      return res.status(200).json({ ok: true, data: { role: profile.role, sellerId: profile.seller_id } })
+    }
+    if (profile.role === 'seller' && !profile.seller_id) return fail(res, 403, 'VENDEUR_NON_ASSOCIE: ce compte vendeur doit être associé à une fiche vendeur par un administrateur.')
+    const scopedSellerId = profile.role === 'seller' ? profile.seller_id : null
     // Autorisations explicites par rôle et par ressource.
     // Aucun vendeur ne reçoit de visibilité globale : le schéma actuel ne lie pas
     // encore tm_profiles à un seller_id permettant de filtrer ses propres données.
@@ -61,7 +67,7 @@ export default async function handler(req: Req, res: Res) {
       sales_manager: ['sellers', 'suppliers', 'receipts', 'distributions', 'sales', 'commissions'],
       cashier: ['sellers', 'sales', 'remittances'],
       auditor: [...resources],
-      seller: [],
+      seller: ['sellers', 'distributions', 'sales', 'remittances'],
     }
     const writeAccess: Record<string, string[]> = {
       super_admin: [...resources],
@@ -69,7 +75,7 @@ export default async function handler(req: Req, res: Res) {
       sales_manager: ['sellers', 'suppliers', 'receipts', 'distributions', 'sales', 'commissions'],
       cashier: ['sales', 'remittances'],
       auditor: [],
-      seller: [],
+      seller: ['sales', 'remittances'],
     }
     if (!(readAccess[profile.role] || []).includes(resource)) {
       return fail(res, 403, 'Votre rôle ne permet pas de consulter cette ressource.')
@@ -82,7 +88,7 @@ export default async function handler(req: Req, res: Res) {
       let rows: unknown[]
       switch (resource) {
         case 'sellers':
-          rows = await sql`select id, full_name as name, phone, commission_rate as rate, is_active as active from public.sellers order by created_at desc`
+          rows = await sql`select id, full_name as name, phone, commission_rate as rate, is_active as active from public.sellers where (${scopedSellerId}::uuid is null or id=${scopedSellerId}::uuid) order by created_at desc`
           break
         case 'suppliers':
           rows = await sql`select id, name, contact_name as contact, phone, email, address, tax_id as "taxId", is_active as active from public.suppliers order by created_at desc`
@@ -91,7 +97,7 @@ export default async function handler(req: Req, res: Res) {
           rows = await sql`select id, supplier_id as "supplierId", received_at::date::text as date, quantity, unit_cost as "unitCost", reference from public.ticket_receipts where status = 'validated' order by received_at desc`
           break
         case 'distributions':
-          rows = await sql`select d.id, d.seller_id as "sellerId", d.supplier_id as "supplierId", d.distributed_at::date::text as date, di.quantity, di.reference_unit_price as price, 'Validée' as status from public.distributions d join public.distribution_items di on di.distribution_id=d.id where d.status='validated' order by d.distributed_at desc`
+          rows = await sql`select d.id, d.seller_id as "sellerId", d.supplier_id as "supplierId", d.distributed_at::date::text as date, di.quantity, di.reference_unit_price as price, 'Validée' as status from public.distributions d join public.distribution_items di on di.distribution_id=d.id where d.status='validated' and (${scopedSellerId}::uuid is null or d.seller_id=${scopedSellerId}::uuid) order by d.distributed_at desc`
           break
         case 'commissions':
           rows = await sql`select distinct on (supplier_id,seller_id) supplier_id as "supplierId", seller_id as "sellerId", commission_rate as rate, valid_from as "validFrom", valid_to as "validTo" from public.supplier_receiver_commissions where valid_from <= current_date and (valid_to is null or valid_to >= current_date) order by supplier_id,seller_id,valid_from desc`
@@ -103,10 +109,10 @@ export default async function handler(req: Req, res: Res) {
           break
         }
         case 'sales':
-          rows = await sql`select s.id, s.seller_id as "sellerId", s.supplier_id as "supplierId", s.sold_at::date::text as date, si.quantity, si.unit_price as price, si.commission_rate as "commissionRate", si.supplier_receiver_commission_rate as "supplierReceiverRate", 'Validée' as status from public.sales s join public.sale_items si on si.sale_id=s.id where s.status='validated' order by s.sold_at desc`
+          rows = await sql`select s.id, s.seller_id as "sellerId", s.supplier_id as "supplierId", s.sold_at::date::text as date, si.quantity, si.unit_price as price, si.commission_rate as "commissionRate", si.supplier_receiver_commission_rate as "supplierReceiverRate", 'Validée' as status from public.sales s join public.sale_items si on si.sale_id=s.id where s.status='validated' and (${scopedSellerId}::uuid is null or s.seller_id=${scopedSellerId}::uuid) order by s.sold_at desc`
           break
         default:
-          rows = await sql`select id, seller_id as "sellerId", paid_at::date::text as date, amount, payment_method as method, transaction_reference as reference from public.remittances order by paid_at desc`
+          rows = await sql`select id, seller_id as "sellerId", paid_at::date::text as date, amount, payment_method as method, transaction_reference as reference from public.remittances where (${scopedSellerId}::uuid is null or seller_id=${scopedSellerId}::uuid) order by paid_at desc`
       }
       return res.status(200).json({ ok: true, data: rows })
     }
@@ -203,7 +209,7 @@ export default async function handler(req: Req, res: Res) {
         return res.status(200).json({ok:true,data:rows[0]})
       }
       case 'sales': {
-        const sellerId = requiredText('sellerId'), supplierId = requiredText('supplierId'), quantity = positiveInt('quantity'), price = Number(body.price)
+        const sellerId = profile.role === 'seller' ? String(profile.seller_id) : requiredText('sellerId'), supplierId = requiredText('supplierId'), quantity = positiveInt('quantity'), price = Number(body.price)
         if (!sellerId || !supplierId || !quantity || !Number.isSafeInteger(price) || price < 0) return fail(res, 400, 'Données de vente invalides')
         let configuredTicketName = 'Ticket standard'
         try { const configuredName = await sql`select ticket_name from public.tm_app_settings where id=true limit 1`; if (configuredName[0]?.ticket_name) configuredTicketName = String(configuredName[0].ticket_name) } catch { /* paramètres non migrés : conserver le type standard historique */ }
@@ -238,7 +244,7 @@ export default async function handler(req: Req, res: Res) {
         return res.status(201).json({ok:true,id:rows[0].id})
       }
       case 'remittances': {
-        const sellerId = requiredText('sellerId'), amount = positiveInt('amount')
+        const sellerId = profile.role === 'seller' ? String(profile.seller_id) : requiredText('sellerId'), amount = positiveInt('amount')
         const methods: Record<string, string> = { 'Espèces': 'cash', 'Virement bancaire': 'bank_transfer', 'Mobile Money': 'mobile_money', 'Autre': 'other' }
         const method = methods[requiredText('method')] || requiredText('method')
         if (!sellerId || !amount || !['cash','bank_transfer','mobile_money','other'].includes(method)) return fail(res, 400, 'Données de reversement invalides')
