@@ -493,3 +493,17 @@ button{
  .top-profile-trigger .top-avatar{width:35px;height:35px}
  .top-profile-chevron{display:none}
 }
+
+
+/* Empilement des menus au-dessus du contenu et des bandeaux */
+.app-shell>.main>.topbar{
+  position:relative;
+  z-index:20!important;
+  isolation:isolate;
+}
+.app-shell>.main>.content{
+  position:relative;
+  z-index:1;
+}
+.top-menu-wrap{z-index:21}
+.top-dropdown{z-index:60!important}
