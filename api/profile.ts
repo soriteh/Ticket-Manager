@@ -32,15 +32,15 @@ export default async function handler(req:Req,res:Res){
   const country=typeof b.country==='string'?b.country.trim():''
   const jobTitle=typeof b.jobTitle==='string'?b.jobTitle.trim():''
   const department=typeof b.department==='string'?b.department.trim():''
-  const employeeCode=typeof b.employeeCode==='string'?b.employeeCode.trim():''
   const avatarUrl=typeof b.avatarUrl==='string'?b.avatarUrl:''
   const preferredLanguage=b.preferredLanguage==='en'?'en':'fr'
   const theme=b.theme==='dark'?'dark':'light'
   const emailNotifications=b.emailNotifications===true
   if(!fullName)return fail(res,400,'Le nom complet est obligatoire.')
-  if(fullName.length>120||phone.length>30||address.length>240||city.length>100||country.length>100||jobTitle.length>120||department.length>120||employeeCode.length>60)return fail(res,400,'Une des informations dépasse la longueur autorisée.')
+  if(fullName.length>120||phone.length>30||address.length>240||city.length>100||country.length>100||jobTitle.length>120||department.length>120)return fail(res,400,'Une des informations dépasse la longueur autorisée.')
   if(avatarUrl.length>2200000|| (avatarUrl&&!/^data:image\/(png|jpeg|webp);base64,/.test(avatarUrl)))return fail(res,400,'Photo invalide ou trop volumineuse (maximum 1,5 Mo).')
-  await sql`update public.tm_profiles set full_name=${fullName},phone=${phone||null},date_of_birth=${dateOfBirth}::date,address=${address||null},city=${city||null},country=${country||null},job_title=${jobTitle||null},department=${department||null},employee_code=${employeeCode||null},avatar_url=${avatarUrl||null},preferred_language=${preferredLanguage},theme=${theme},email_notifications=${emailNotifications} where user_id=${userId}::uuid`
-  return res.status(200).json({ok:true})
+  await sql`update public.tm_profiles set full_name=${fullName},phone=${phone||null},date_of_birth=${dateOfBirth}::date,address=${address||null},city=${city||null},country=${country||null},job_title=${jobTitle||null},department=${department||null},avatar_url=${avatarUrl||null},preferred_language=${preferredLanguage},theme=${theme},email_notifications=${emailNotifications} where user_id=${userId}::uuid`
+  const updated=await sql`select employee_code as "employeeCode",preferred_language as "preferredLanguage",theme,email_notifications as "emailNotifications" from public.tm_profiles where user_id=${userId}::uuid limit 1`
+  return res.status(200).json({ok:true,data:updated[0]})
  }catch(error){console.error('[profile]',error);return fail(res,500,'Erreur lors de la lecture ou de la mise à jour du profil.')}
 }
