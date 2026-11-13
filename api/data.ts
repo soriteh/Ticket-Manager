@@ -52,10 +52,31 @@ export default async function handler(req: Req, res: Res) {
     const profile = profiles[0] as { role: string; is_active: boolean } | undefined
     if (!profile) return fail(res, 403, 'PROFIL_ABSENT: aucun profil applicatif n’est associé à ce compte Neon Auth. Un administrateur doit créer son entrée dans tm_profiles.')
     if (!profile.is_active) return fail(res, 403, 'PROFIL_INACTIF: ce compte est désactivé dans tm_profiles. Un administrateur doit vérifier is_active.')
-    const readRoles = ['super_admin', 'admin', 'sales_manager', 'cashier', 'seller', 'auditor']
-    const writeRoles = ['super_admin', 'admin', 'sales_manager', 'cashier']
-    if (!readRoles.includes(profile.role)) return fail(res, 403, 'Accès refusé')
-    if (req.method === 'POST' && !writeRoles.includes(profile.role)) return fail(res, 403, 'Droits insuffisants')
+    // Autorisations explicites par rôle et par ressource.
+    // Aucun vendeur ne reçoit de visibilité globale : le schéma actuel ne lie pas
+    // encore tm_profiles à un seller_id permettant de filtrer ses propres données.
+    const readAccess: Record<string, string[]> = {
+      super_admin: [...resources],
+      admin: [...resources],
+      sales_manager: ['sellers', 'suppliers', 'receipts', 'distributions', 'sales', 'commissions'],
+      cashier: ['sellers', 'sales', 'remittances'],
+      auditor: [...resources],
+      seller: [],
+    }
+    const writeAccess: Record<string, string[]> = {
+      super_admin: [...resources],
+      admin: [...resources],
+      sales_manager: ['sellers', 'suppliers', 'receipts', 'distributions', 'sales', 'commissions'],
+      cashier: ['sales', 'remittances'],
+      auditor: [],
+      seller: [],
+    }
+    if (!(readAccess[profile.role] || []).includes(resource)) {
+      return fail(res, 403, 'Votre rôle ne permet pas de consulter cette ressource.')
+    }
+    if (req.method === 'POST' && !(writeAccess[profile.role] || []).includes(resource)) {
+      return fail(res, 403, 'Votre rôle ne permet pas de modifier cette ressource.')
+    }
 
     if (req.method === 'GET') {
       let rows: unknown[]
