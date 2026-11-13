@@ -267,3 +267,62 @@ input:focus{transition:border-color .18s ease,box-shadow .18s ease;box-shadow:0 
 }
 @keyframes adminCurrentSweep{from{background-position:120% 0}to{background-position:-120% 0}}
 @media(prefers-reduced-motion:reduce){.admin-console:before,.admin-console:after{animation:none!important}}
+
+
+/* Electron Flow global — toutes les pages de l'espace de gestion */
+.app-shell{
+  position:relative;
+  isolation:isolate;
+  background:#071a36;
+}
+.app-shell::before,
+.app-shell::after{
+  content:"";
+  position:fixed;
+  inset:0;
+  pointer-events:none;
+  z-index:0;
+}
+.app-shell::before{
+  opacity:.32;
+  background-image:
+    radial-gradient(circle,rgba(120,211,255,.98) 0 1.5px,rgba(40,153,255,.4) 2px,transparent 4px),
+    radial-gradient(circle,rgba(255,157,75,.95) 0 1.4px,rgba(255,120,0,.35) 2px,transparent 4px),
+    radial-gradient(circle,rgba(94,190,255,.85) 0 1.2px,transparent 3px),
+    linear-gradient(90deg,rgba(76,164,255,.14) 1px,transparent 1px),
+    linear-gradient(rgba(76,164,255,.11) 1px,transparent 1px),
+    linear-gradient(135deg,transparent 48.8%,rgba(255,132,43,.26) 49.5%,rgba(255,132,43,.26) 50%,transparent 50.7%);
+  background-size:180px 120px,240px 170px,310px 210px,54px 54px,54px 54px,180px 180px;
+  background-position:0 0,70px 30px,140px 80px,0 0,0 0,0 0;
+  animation:tmGlobalElectronFlow 15s linear infinite;
+}
+.app-shell::after{
+  opacity:.55;
+  background:
+    radial-gradient(ellipse at 12% 18%,rgba(0,132,255,.19),transparent 34%),
+    radial-gradient(ellipse at 88% 24%,rgba(255,120,0,.12),transparent 30%),
+    linear-gradient(105deg,transparent 35%,rgba(65,174,255,.08) 49%,rgba(255,143,61,.10) 51%,transparent 66%);
+  background-size:auto,auto,220% 100%;
+  animation:tmGlobalGlow 18s ease-in-out infinite alternate,tmGlobalCurrent 11s linear infinite;
+}
+.app-shell>.main{
+  position:relative;
+  z-index:1;
+  background:transparent;
+}
+.app-shell>.sidebar{z-index:5}
+@keyframes tmGlobalElectronFlow{
+  0%{background-position:0 0,70px 30px,140px 80px,0 0,0 0,0 0}
+  100%{background-position:180px 120px,-170px 200px,450px -130px,54px 54px,-54px 108px,180px 180px}
+}
+@keyframes tmGlobalGlow{
+  0%{transform:translate3d(-1%,0,0) scale(1)}
+  100%{transform:translate3d(1%,1%,0) scale(1.05)}
+}
+@keyframes tmGlobalCurrent{
+  from{background-position:0 0,0 0,120% 0}
+  to{background-position:0 0,0 0,-120% 0}
+}
+@media(prefers-reduced-motion:reduce){
+  .app-shell::before,.app-shell::after{animation:none!important}
+}
