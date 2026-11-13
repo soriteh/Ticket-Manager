@@ -594,3 +594,23 @@ button{
 .dashboard-hero .dashboard-period input{color:#fff!important;background:rgba(255,255,255,.14)!important;border:1px solid rgba(255,255,255,.34)!important;border-radius:10px;padding:12px 14px;min-height:48px;color-scheme:dark}
 .dashboard-hero .dashboard-period input:focus{outline:2px solid rgba(255,255,255,.45);outline-offset:2px}
 .dashboard-hero .dashboard-period input::-webkit-calendar-picker-indicator{filter:invert(1);opacity:.9}
+
+
+/* Page commissions — synthèse mensuelle */
+.commission-period-panel{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(190px,.65fr) auto;align-items:end;gap:22px;padding:20px 22px;margin-bottom:18px;border:1px solid #e2eaf3;background:linear-gradient(120deg,rgba(255,255,255,.98),rgba(243,248,255,.96))}
+.commission-kicker{display:block;color:#e27c28;font-size:9px;font-weight:850;letter-spacing:1.5px;margin-bottom:7px}
+.commission-period-panel h3{margin:0;color:#1b3552;font:800 15px Manrope,sans-serif}
+.commission-period-panel p{margin:6px 0 0;color:#72849a;font-size:10px;line-height:1.55}
+.commission-month-field{display:grid;gap:7px;color:#526a84;font-size:10px;font-weight:750}
+.commission-month-field input{min-height:42px;padding:9px 12px;border:1px solid #d9e4ef;border-radius:8px;background:#fff;color:#203b57;font:600 12px 'DM Sans',sans-serif}
+.commission-period-range{display:flex;align-items:center;gap:8px;min-height:42px;padding:0 12px;border:1px solid #e2eaf3;border-radius:8px;background:#fff;color:#657b93;font-size:10px;white-space:nowrap}
+.commission-period-range svg{color:#1676bd}
+.commission-period-range b{color:#25415f}
+.commission-kpis{align-items:stretch}
+.commission-table-panel{margin-bottom:18px}
+.commission-table-panel .panel-head{align-items:center;flex-wrap:wrap}
+.commission-table-panel .panel-head p{max-width:680px;line-height:1.55}
+.commission-record-count{padding:7px 10px;border-radius:20px;background:#eef5fc;color:#37678f;font-size:9px;font-weight:750;white-space:nowrap}
+.commission-table-panel td b{color:#213b57}
+@media(max-width:900px){.commission-period-panel{grid-template-columns:1fr 1fr}.commission-period-range{grid-column:1/-1;width:max-content}}
+@media(max-width:600px){.commission-period-panel{grid-template-columns:1fr;padding:16px}.commission-period-range{grid-column:auto;width:auto;white-space:normal}.commission-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.commission-kpis .stat-card:last-child{grid-column:1/-1}}
