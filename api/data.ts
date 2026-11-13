@@ -131,7 +131,9 @@ export default async function handler(req: Req, res: Res) {
       case 'distributions': {
         const sellerId = requiredText('sellerId'), supplierId = requiredText('supplierId'), quantity = positiveInt('quantity'), price = Number(body.price)
         if (!sellerId || !supplierId || !quantity || !Number.isSafeInteger(price) || price < 0) return fail(res, 400, 'Données de distribution invalides')
-        const ticketTypes = await sql`insert into public.ticket_types (name) values ((select ticket_name from public.tm_app_settings where id=true)) on conflict (name) do update set name=excluded.name returning id`
+        let configuredTicketName = 'Ticket standard'
+        try { const configuredName = await sql`select ticket_name from public.tm_app_settings where id=true limit 1`; if (configuredName[0]?.ticket_name) configuredTicketName = String(configuredName[0].ticket_name) } catch { /* paramètres non migrés : conserver le type standard historique */ }
+        const ticketTypes = await sql`insert into public.ticket_types (name) values (${configuredTicketName}) on conflict (name) do update set name=excluded.name returning id`
         const ref = 'DST-' + crypto.randomUUID().slice(0, 8).toUpperCase()
         const rows = await sql`
           with available as (
@@ -166,7 +168,9 @@ export default async function handler(req: Req, res: Res) {
       case 'sales': {
         const sellerId = requiredText('sellerId'), supplierId = requiredText('supplierId'), quantity = positiveInt('quantity'), price = Number(body.price)
         if (!sellerId || !supplierId || !quantity || !Number.isSafeInteger(price) || price < 0) return fail(res, 400, 'Données de vente invalides')
-        const ticketTypes = await sql`insert into public.ticket_types (name) values ((select ticket_name from public.tm_app_settings where id=true)) on conflict (name) do update set name=excluded.name returning id`
+        let configuredTicketName = 'Ticket standard'
+        try { const configuredName = await sql`select ticket_name from public.tm_app_settings where id=true limit 1`; if (configuredName[0]?.ticket_name) configuredTicketName = String(configuredName[0].ticket_name) } catch { /* paramètres non migrés : conserver le type standard historique */ }
+        const ticketTypes = await sql`insert into public.ticket_types (name) values (${configuredTicketName}) on conflict (name) do update set name=excluded.name returning id`
         const rateRows = await sql`select commission_rate from public.sellers where id=${sellerId}::uuid and is_active=true`
         if (!rateRows.length) return fail(res, 400, 'Vendeur introuvable ou inactif')
         const ref = 'VTE-' + crypto.randomUUID().slice(0, 8).toUpperCase()
