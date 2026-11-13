@@ -71,7 +71,7 @@ function AdminConsole({onBack}:{onBack:()=>void}){
   finally{setBusy('')}
  }
  async function update(user:AdminUser,change:Record<string,unknown>){setBusy(user.id);setError('');try{await call('PATCH',{userId:user.id,...change});await refresh()}catch(e){setError(e instanceof Error?e.message:'Modification impossible')}finally{setBusy('')}}
- const roles=['admin','sales_manager','cashier','seller','auditor']
+ const roles=['super_admin','admin','sales_manager','cashier','seller','auditor']
  const active=users.filter(u=>u.isActive).length,inactive=users.filter(u=>!u.isActive&&u.role!=='sans_profil').length,admins=users.filter(u=>['admin','super_admin'].includes(u.role)).length,missing=users.filter(u=>u.role==='sans_profil').length
  const visible=users.filter(u=>(u.email+' '+(u.fullName||u.name||'')).toLowerCase().includes(search.toLowerCase())&&(filter==='all'||(filter==='active'&&u.isActive)||(filter==='inactive'&&!u.isActive&&u.role!=='sans_profil')||(filter==='missing'&&u.role==='sans_profil')))
  return <main className="admin-console">
