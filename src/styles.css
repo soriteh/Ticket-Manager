@@ -67,3 +67,68 @@ input:focus{transition:border-color .18s ease,box-shadow .18s ease;box-shadow:0 
   .help-card p{margin:6px 0}
   .profile{margin-top:10px;padding-top:10px}
 }
+
+
+/* En-tête principal — hiérarchie, accessibilité et adaptation responsive */
+.topbar{
+  min-height:84px;
+  height:auto;
+  padding:14px 36px;
+  gap:20px;
+}
+.top-left{display:flex;align-items:center;gap:12px;min-width:0}
+.top-left>div{min-width:0}
+.crumb{display:block;font-size:12px;font-weight:500;letter-spacing:.01em;color:#8292a9;line-height:1.35}
+.topbar h1{font-size:22px;line-height:1.25;margin:4px 0 0;color:#102846}
+.top-actions{gap:14px;flex-shrink:0}
+.date-pill{
+  min-height:42px;
+  padding:10px 14px;
+  gap:10px;
+  border-color:#e6ecf4;
+  background:#f8fafd;
+  color:#536b89;
+  font-size:13px;
+  font-weight:500;
+  white-space:nowrap;
+}
+.date-pill svg{width:18px;height:18px;color:#607995}
+.icon-btn{
+  width:40px;height:40px;padding:0;
+  display:inline-grid;place-items:center;
+  border-radius:10px;color:#5d718c;
+}
+.icon-btn svg{width:20px;height:20px;stroke-width:1.9}
+.icon-btn:hover{background:#f0f5fb;color:#075da8}
+.icon-btn:focus-visible,.menu-btn:focus-visible{
+  outline:3px solid rgba(8,104,185,.28);
+  outline-offset:2px;
+}
+.top-avatar{
+  width:42px;height:42px;
+  font-size:12px;
+  letter-spacing:.02em;
+  background:#102e52;
+  box-shadow:0 0 0 3px #f0f4f9;
+}
+@media(max-width:1100px){
+  .topbar{padding:12px 24px;gap:14px}
+  .top-actions{gap:10px}
+}
+@media(max-width:760px){
+  .topbar{min-height:70px;height:auto;padding:10px 14px;gap:8px}
+  .top-left{gap:6px}
+  .crumb{font-size:10px}
+  .topbar h1{font-size:17px;margin-top:2px}
+  .top-actions{gap:4px}
+  .icon-btn{width:34px;height:36px;border-radius:8px}
+  .icon-btn svg{width:18px;height:18px}
+  .top-avatar{width:34px;height:34px;font-size:10px}
+}
+@media(max-width:380px){
+  .topbar{padding-inline:9px}
+  .top-actions{gap:1px}
+  .icon-btn{width:31px}
+  .top-avatar{width:31px;height:31px}
+  .topbar h1{font-size:15px}
+}
