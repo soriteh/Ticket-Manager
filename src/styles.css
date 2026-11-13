@@ -562,3 +562,10 @@ button{
 .profile-page-heading{gap:14px;align-items:center}
 .profile-photo-control small{font-size:7px;padding:3px 0}
 .profile-form label>small{display:block;margin-top:5px;color:#71839a;font-size:10px;line-height:1.45}
+
+.admin-reset-button{display:inline-flex;align-items:center;justify-content:center;margin:6px 0 0;padding:8px 10px;border:1px solid #c9ddf2;border-radius:8px;background:#f2f8ff;color:#075eaa;font-size:10px;font-weight:700;white-space:nowrap;transition:background .2s,border-color .2s}
+.admin-reset-button:hover:not(:disabled){background:#e2f0ff;border-color:#75b6ec}
+.admin-reset-button:disabled{opacity:.55;cursor:not-allowed}
+.admin-reset-success{display:flex;align-items:center;gap:10px;margin:14px 0;padding:13px 16px;border:1px solid #a8dfc1;border-radius:10px;background:#effaf3;color:#176b3b;font-size:12px;font-weight:600}
+.admin-table td:last-child{min-width:190px}
+@media(max-width:760px){.admin-reset-button{white-space:normal;text-align:center}}
