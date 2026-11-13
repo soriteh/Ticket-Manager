@@ -59,8 +59,7 @@ export default async function handler(req: Req, res: Res) {
     if (profile.role === 'seller' && !profile.seller_id) return fail(res, 403, 'VENDEUR_NON_ASSOCIE: ce compte vendeur doit être associé à une fiche vendeur par un administrateur.')
     const scopedSellerId = profile.role === 'seller' ? profile.seller_id : null
     // Autorisations explicites par rôle et par ressource.
-    // Aucun vendeur ne reçoit de visibilité globale : le schéma actuel ne lie pas
-    // encore tm_profiles à un seller_id permettant de filtrer ses propres données.
+    // Un profil vendeur doit être lié à une fiche unique ; ses lectures sont filtrées par cet identifiant.
     const readAccess: Record<string, string[]> = {
       super_admin: [...resources],
       admin: [...resources],
