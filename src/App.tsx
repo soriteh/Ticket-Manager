@@ -45,7 +45,7 @@ async function dataApi(resource:string, method:'GET'|'POST'='GET', body?:Record<
 type AdminUser={id:string;email:string;name?:string;fullName?:string;role:string;isActive:boolean}
 const roleLabels:Record<string,string>={super_admin:'Super administrateur',admin:'Administrateur',sales_manager:'Responsable commercial',cashier:'Caissier',seller:'Vendeur',auditor:'Auditeur',sans_profil:'Sans profil'}
 function AdminConsole({onBack}:{onBack:()=>void}){
- const [users,setUsers]=useState<AdminUser[]>([]),[loading,setLoading]=useState(true),[error,setError]=useState(''),[busy,setBusy]=useState(''),[search,setSearch]=useState(''),[filter,setFilter]=useState('all')
+ const [users,setUsers]=useState<AdminUser[]>([]),[loading,setLoading]=useState(true),[error,setError]=useState(''),[busy,setBusy]=useState(''),[search,setSearch]=useState(''),[filter,setFilter]=useState('all'),[resetNotice,setResetNotice]=useState('')
  async function call(method:'GET'|'PATCH',body?:Record<string,unknown>){
   const raw=String(import.meta.env.VITE_NEON_AUTH_URL||''),url=raw.endsWith('/')?raw.slice(0,-1):raw
   const tokenRes=await fetch(url+'/token',{credentials:'include',cache:'no-store'})
@@ -59,6 +59,16 @@ function AdminConsole({onBack}:{onBack:()=>void}){
  }
  async function refresh(){setLoading(true);setError('');try{setUsers(await call('GET'))}catch(e){setError(e instanceof Error?e.message:'Chargement impossible')}finally{setLoading(false)}}
  useEffect(()=>{void refresh()},[])
+ async function sendPasswordReset(user:AdminUser){
+  setBusy(user.id);setError('');setResetNotice('')
+  try{
+   const client=authClient as any
+   const result=await client.requestPasswordReset({email:user.email,redirectTo:window.location.origin})
+   if(result?.error)throw new Error(result.error.message||'Neon Auth n’a pas pu envoyer le lien.')
+   setResetNotice('Un lien de réinitialisation a été envoyé à '+user.email+'.')
+  }catch(e){setError(e instanceof Error?e.message:'Envoi du lien impossible. Vérifiez la configuration e-mail de Neon Auth.')}
+  finally{setBusy('')}
+ }
  async function update(user:AdminUser,change:Record<string,unknown>){setBusy(user.id);setError('');try{await call('PATCH',{userId:user.id,...change});await refresh()}catch(e){setError(e instanceof Error?e.message:'Modification impossible')}finally{setBusy('')}}
  const roles=['admin','sales_manager','cashier','seller','auditor']
  const active=users.filter(u=>u.isActive).length,inactive=users.filter(u=>!u.isActive&&u.role!=='sans_profil').length,admins=users.filter(u=>['admin','super_admin'].includes(u.role)).length,missing=users.filter(u=>u.role==='sans_profil').length
@@ -77,11 +87,11 @@ function AdminConsole({onBack}:{onBack:()=>void}){
     <article className="admin-stat stat-admin"><div className="admin-stat-top"><span>ADMINISTRATEURS</span><b>03</b></div><strong>{admins}</strong><small>Gestion des paramètres et des accès</small><div className="admin-stat-icon">◇</div></article>
     <article className="admin-stat stat-pending"><div className="admin-stat-top"><span>PROFILS À CONFIGURER</span><b>04</b></div><strong>{missing+inactive}</strong><small>{missing} sans profil · {inactive} inactif(s)</small><div className="admin-stat-icon">!</div></article>
    </section>
-   {error&&<div role="alert" className="admin-alert"><b>Attention</b><span>{error}</span><button onClick={()=>void refresh()}>Réessayer</button></div>}
+   {error&&<div role="alert" className="admin-alert"><b>Attention</b><span>{error}</span><button onClick={()=>void refresh()}>Réessayer</button></div>}{resetNotice&&<div role="status" className="admin-reset-success">✓ {resetNotice}</div>}
    <section className="admin-users-panel">
     <div className="admin-panel-head"><div><div className="admin-kicker dark"><span/> GESTION DES IDENTITÉS</div><h2>Utilisateurs et permissions</h2><p>Attribuez les rôles et contrôlez l’état des comptes depuis une seule interface.</p></div><button className="admin-refresh" onClick={()=>void refresh()} disabled={loading}><span className={loading?'admin-spin':''}>↻</span> Actualiser</button></div>
     <div className="admin-toolbar"><div className="admin-search"><span>⌕</span><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher un nom ou une adresse e-mail…"/></div><div className="admin-filters">{[['all','Tous'],['active','Actifs'],['inactive','Inactifs'],['missing','Sans profil']].map(([v,l])=><button key={v} className={filter===v?'selected':''} onClick={()=>setFilter(v)}>{l}{v==='all'&&<b>{users.length}</b>}</button>)}</div></div>
-    {loading?<div className="admin-loading"><span className="admin-loader"/><b>Synchronisation des comptes…</b><small>Récupération des profils depuis Neon</small></div>:<div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>UTILISATEUR</th><th>ADRESSE E-MAIL</th><th>RÔLE ET AUTORISATIONS</th><th>STATUT</th><th>GESTION</th></tr></thead><tbody>{visible.map((u,i)=><tr key={u.id} style={{animationDelay:(i*45)+'ms'}}><td><div className="admin-user-cell"><span className="admin-user-avatar">{(u.fullName||u.name||u.email||'U').slice(0,1).toUpperCase()}</span><span><b>{u.fullName||u.name||'Utilisateur'}</b><small>Compte Ticket Manager</small></span></div></td><td className="admin-email">{u.email}</td><td><select className="admin-role-select" aria-label={'Attribuer un rôle à '+u.email} disabled={busy===u.id} value={roles.includes(u.role)?u.role:''} onChange={e=>void update(u,{role:e.target.value})}>{u.role==='sans_profil'&&<option value="" disabled>Attribuer un rôle</option>}{roles.map(r=><option key={r} value={r}>{roleLabels[r]||r}</option>)}</select></td><td><span className={'admin-status '+(u.role==='sans_profil'?'status-missing':u.isActive?'status-active':'status-inactive')}><i/>{u.role==='sans_profil'?'Profil manquant':u.isActive?'Actif':'Inactif'}</span></td><td><button className={'admin-toggle '+(u.isActive?'is-on':'')} disabled={busy===u.id||u.role==='sans_profil'} onClick={()=>void update(u,{isActive:!u.isActive})}>{busy===u.id?'En cours…':u.isActive?'Désactiver':'Activer'}</button></td></tr>)}</tbody></table>{visible.length===0&&<div className="admin-empty"><span>⌕</span><b>Aucun utilisateur trouvé</b><small>Modifiez votre recherche ou le filtre sélectionné.</small></div>}</div>}
+    {loading?<div className="admin-loading"><span className="admin-loader"/><b>Synchronisation des comptes…</b><small>Récupération des profils depuis Neon</small></div>:<div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>UTILISATEUR</th><th>ADRESSE E-MAIL</th><th>RÔLE ET AUTORISATIONS</th><th>STATUT</th><th>GESTION DU COMPTE</th></tr></thead><tbody>{visible.map((u,i)=><tr key={u.id} style={{animationDelay:(i*45)+'ms'}}><td><div className="admin-user-cell"><span className="admin-user-avatar">{(u.fullName||u.name||u.email||'U').slice(0,1).toUpperCase()}</span><span><b>{u.fullName||u.name||'Utilisateur'}</b><small>Compte Ticket Manager</small></span></div></td><td className="admin-email">{u.email}</td><td><select className="admin-role-select" aria-label={'Attribuer un rôle à '+u.email} disabled={busy===u.id} value={roles.includes(u.role)?u.role:''} onChange={e=>void update(u,{role:e.target.value})}>{u.role==='sans_profil'&&<option value="" disabled>Attribuer un rôle</option>}{roles.map(r=><option key={r} value={r}>{roleLabels[r]||r}</option>)}</select></td><td><span className={'admin-status '+(u.role==='sans_profil'?'status-missing':u.isActive?'status-active':'status-inactive')}><i/>{u.role==='sans_profil'?'Profil manquant':u.isActive?'Actif':'Inactif'}</span></td><td><button className={'admin-toggle '+(u.isActive?'is-on':'')} disabled={busy===u.id||u.role==='sans_profil'} onClick={()=>void update(u,{isActive:!u.isActive})}>{busy===u.id?'En cours…':u.isActive?'Désactiver':'Activer'}</button><button className="admin-reset-button" disabled={busy===u.id||u.role==='sans_profil'||!u.email} onClick={()=>void sendPasswordReset(u)}>{busy===u.id?'En cours…':'Réinitialiser le mot de passe'}</button></td></tr>)}</tbody></table>{visible.length===0&&<div className="admin-empty"><span>⌕</span><b>Aucun utilisateur trouvé</b><small>Modifiez votre recherche ou le filtre sélectionné.</small></div>}</div>}
     <div className="admin-panel-foot"><span>Affichage de <b>{visible.length}</b> sur <b>{users.length}</b> compte(s)</span><span><i/> Données sécurisées · Neon PostgreSQL</span></div>
    </section>
    <div className="admin-security-note"><span>◇</span><div><b>Contrôle des accès activé</b><p>Les autorisations sont vérifiées côté serveur. Les changements de rôle et de statut sont enregistrés dans Neon.</p></div></div>
@@ -244,6 +254,39 @@ export default function App() {
   const [verificationPending, setVerificationPending] = useState(false)
   const [otp, setOtp] = useState('')
   const [otpBusy, setOtpBusy] = useState(false)
+ const [resetPassword,setResetPassword]=useState('')
+ const [resetPasswordConfirm,setResetPasswordConfirm]=useState('')
+ const [resetBusy,setResetBusy]=useState(false)
+ const resetToken=new URLSearchParams(window.location.search).get('token')
+
+  if (resetToken) {
+    async function submitReset(e:React.FormEvent<HTMLFormElement>){
+      e.preventDefault();setError('');setSuccess('')
+      if(resetPassword.length<8){setError('Le mot de passe doit contenir au moins 8 caractères.');return}
+      if(resetPassword!==resetPasswordConfirm){setError('Les deux mots de passe ne correspondent pas.');return}
+      setResetBusy(true)
+      try{
+        const result=await (authClient as any).resetPassword({newPassword:resetPassword,token:resetToken})
+        if(result?.error)throw new Error(result.error.message||'Le lien est invalide ou expiré.')
+        window.history.replaceState({},'',window.location.pathname)
+        setPassword('');setResetPassword('');setResetPasswordConfirm('')
+        setSuccess('Mot de passe réinitialisé. Vous pouvez maintenant vous connecter.')
+      }catch(e){setError(e instanceof Error?e.message:'Réinitialisation impossible. Demandez un nouveau lien.')}
+      finally{setResetBusy(false)}
+    }
+    return <main style={{minHeight:'100vh',display:'grid',placeItems:'center',padding:24,background:'linear-gradient(135deg,#071a36,#0b3970)',fontFamily:'Inter,Arial,sans-serif'}}>
+      <form onSubmit={submitReset} style={{width:'100%',maxWidth:440,boxSizing:'border-box',padding:32,background:'#fff',borderRadius:20,boxShadow:'0 20px 60px rgba(0,0,0,.2)'}}>
+        <div style={{width:48,height:48,borderRadius:14,display:'grid',placeItems:'center',background:'#0057b9',color:'#fff',fontSize:24,fontWeight:800}}>T</div>
+        <h1 style={{color:'#071a36'}}>Nouveau mot de passe</h1>
+        <p style={{color:'#64748b'}}>Choisissez un nouveau mot de passe pour votre compte Ticket Manager.</p>
+        <label style={{display:'block',fontWeight:600,color:'#243247',marginTop:18}}>Nouveau mot de passe<input type="password" required minLength={8} autoComplete="new-password" value={resetPassword} onChange={e=>setResetPassword(e.target.value)} style={{display:'block',width:'100%',boxSizing:'border-box',padding:12,marginTop:7,border:'1px solid #d7dfeb',borderRadius:9}}/></label>
+        <label style={{display:'block',fontWeight:600,color:'#243247',marginTop:14}}>Confirmer le mot de passe<input type="password" required minLength={8} autoComplete="new-password" value={resetPasswordConfirm} onChange={e=>setResetPasswordConfirm(e.target.value)} style={{display:'block',width:'100%',boxSizing:'border-box',padding:12,marginTop:7,border:'1px solid #d7dfeb',borderRadius:9}}/></label>
+        {error&&<p role="alert" style={{color:'#b42318',fontSize:13}}>{error}</p>}
+        {success&&<p role="status" style={{color:'#067647',fontSize:13}}>{success}</p>}
+        <button disabled={resetBusy} style={{width:'100%',marginTop:18,padding:13,border:0,borderRadius:9,background:'#0057b9',color:'#fff',fontWeight:700}}>{resetBusy?'Mise à jour…':'Enregistrer le nouveau mot de passe'}</button>
+      </form>
+    </main>
+  }
 
   if (!isNeonAuthConfigured) {
     return <main style={{minHeight:'100vh',display:'grid',placeItems:'center',padding:24,background:'#f4f7fb',fontFamily:'Inter,Arial,sans-serif'}}>
