@@ -82,3 +82,29 @@ create index if not exists idx_sales_receiver_date
 
 -- Le taux déjà enregistré dans sale_items reste le snapshot financier de référence.
 -- Les ventes historiques sans receiver_id ne sont volontairement pas réattribuées.
+
+-- Commission globale du receveur : taux indépendant du fournisseur et du vendeur.
+-- L'ancienne table receiver_supplier_commissions est conservée sans être utilisée
+-- par le calcul courant, afin de ne supprimer aucune donnée historique.
+create table if not exists public.receiver_commissions (
+  id uuid primary key default gen_random_uuid(),
+  receiver_id uuid not null references public.receivers(id) on delete restrict,
+  commission_rate numeric(5,2) not null
+    check (commission_rate >= 0 and commission_rate <= 100),
+  valid_from date not null default current_date,
+  valid_to date,
+  created_by uuid references neon_auth."user"(id),
+  created_at timestamptz not null default now(),
+  check (valid_to is null or valid_to >= valid_from),
+  unique (receiver_id, valid_from)
+);
+
+create index if not exists idx_receiver_commissions_lookup
+  on public.receiver_commissions(receiver_id, valid_from desc);
+
+-- Snapshot du taux global receveur sur chaque nouvelle vente.
+-- Les anciennes ventes restent NULL et ne sont pas recalculées rétroactivement.
+alter table public.sale_items
+  add column if not exists receiver_commission_rate numeric(5,2)
+  check (receiver_commission_rate is null or (receiver_commission_rate >= 0 and receiver_commission_rate <= 100));
+
