@@ -255,6 +255,7 @@ export default async function handler(req: Req, res: Res) {
         const inserted=await sql`select id, commission_rate as rate, valid_from::text as "validFrom", valid_to::text as "validTo" from public.receiver_supplier_commissions where supplier_id=${supplierId}::uuid and receiver_id=${receiverId}::uuid and valid_from=${validFrom}::date limit 1`
         return res.status(201).json({ok:true,data:inserted[0]})
 
+      }
       case 'sales': {
         const sellerId = profile.role === 'seller' ? String(profile.seller_id) : requiredText('sellerId'), supplierId = requiredText('supplierId'), quantity = positiveInt('quantity'), price = Number(body.price)
         if (!sellerId || !supplierId || !quantity || !Number.isSafeInteger(price) || price < 0) return fail(res, 400, 'Données de vente invalides')
