@@ -102,7 +102,7 @@ export default async function handler(req: Req, res: Res) {
           rows = await sql`select id, supplier_id as "supplierId", received_at::date::text as date, quantity, unit_cost as "unitCost", reference from public.ticket_receipts where status = 'validated' order by received_at desc`
           break
         case 'distributions':
-          rows = await sql`select d.id, d.seller_id as "sellerId", d.supplier_id as "supplierId", d.distributed_at::date::text as date, di.quantity, di.reference_unit_price as price, 'Validée' as status from public.distributions d join public.distribution_items di on di.distribution_id=d.id where d.status='validated' and (${scopedSellerId}::uuid is null or d.seller_id=${scopedSellerId}::uuid) order by d.distributed_at desc`
+          rows = await sql`select d.id, d.seller_id as "sellerId", d.supplier_id as "supplierId", d.receiver_id as "receiverId", r.full_name as "receiverName", d.distributed_at::date::text as date, di.quantity, di.reference_unit_price as price, 'Validée' as status from public.distributions d join public.distribution_items di on di.distribution_id=d.id left join public.receivers r on r.id=d.receiver_id where d.status='validated' and (${scopedSellerId}::uuid is null or d.seller_id=${scopedSellerId}::uuid) order by d.distributed_at desc`
           break
         case 'commissions':
           rows = await sql`select c.id, c.supplier_id as "supplierId", s.name as "supplierName", c.receiver_id as "receiverId", r.full_name as "receiverName", c.commission_rate as rate, c.valid_from::text as "validFrom", c.valid_to::text as "validTo" from public.receiver_supplier_commissions c join public.suppliers s on s.id=c.supplier_id join public.receivers r on r.id=c.receiver_id order by s.name, r.full_name, c.valid_from desc`
@@ -173,8 +173,12 @@ export default async function handler(req: Req, res: Res) {
         if(conflicts.length)return fail(res,409,'Une affectation existe déjà à cette date ou après. Vérifiez l’historique avant de continuer.')
         const current=await sql`select id,valid_from::text as valid_from from public.seller_receiver_assignments where seller_id=${sellerId}::uuid and valid_to is null order by valid_from desc limit 1`
         if(current.length&&String(current[0].valid_from)>=validFrom)return fail(res,409,'La nouvelle affectation doit commencer après la date de début de l’affectation actuelle.')
-        const rows=await sql`with locked_seller as materialized (select id from public.sellers where id=${sellerId}::uuid for update), closed as (update public.seller_receiver_assignments set valid_to=(${validFrom}::date-interval '1 day')::date where seller_id in (select id from locked_seller) and valid_to is null returning id), inserted as (insert into public.seller_receiver_assignments(seller_id,receiver_id,valid_from,created_by) select ${sellerId}::uuid,${receiverId}::uuid,${validFrom}::date,${userId}::uuid from locked_seller returning id) select id from inserted`
-        return res.status(201).json({ok:true,id:rows[0]?.id})
+        await sql.transaction([
+          sql`select id from public.sellers where id=${sellerId}::uuid for update`,
+          sql`update public.seller_receiver_assignments set valid_to=(${validFrom}::date-interval '1 day')::date where seller_id=${sellerId}::uuid and valid_to is null`,
+          sql`insert into public.seller_receiver_assignments(seller_id,receiver_id,valid_from,created_by) values(${sellerId}::uuid,${receiverId}::uuid,${validFrom}::date,${userId}::uuid)`
+        ])
+        return res.status(201).json({ok:true})
       }
       case 'sellers': {
         const name = requiredText('name')
