@@ -245,10 +245,16 @@ export default async function handler(req: Req, res: Res) {
           }
           return fail(res,409,'La date d’effet doit être postérieure au dernier taux configuré pour ce couple.')
         }
-        if(current.length) await sql`update public.receiver_supplier_commissions set valid_to=(${validFrom}::date - interval '1 day')::date where id=${current[0].id}::uuid`
-        const inserted=await sql`insert into public.receiver_supplier_commissions(supplier_id,receiver_id,commission_rate,valid_from,created_by) values(${supplierId}::uuid,${receiverId}::uuid,${rate},${validFrom}::date,${userId}::uuid) returning id, commission_rate as rate, valid_from::text as "validFrom", valid_to::text as "validTo"`
+        if(current.length){
+          const closeCurrent = sql`update public.receiver_supplier_commissions set valid_to=(${validFrom}::date - interval '1 day')::date where id=${current[0].id}::uuid`
+          const insertCurrent = sql`insert into public.receiver_supplier_commissions(supplier_id,receiver_id,commission_rate,valid_from,created_by) values(${supplierId}::uuid,${receiverId}::uuid,${rate},${validFrom}::date,${userId}::uuid)`
+          await sql.transaction([closeCurrent,insertCurrent])
+        }else{
+          await sql`insert into public.receiver_supplier_commissions(supplier_id,receiver_id,commission_rate,valid_from,created_by) values(${supplierId}::uuid,${receiverId}::uuid,${rate},${validFrom}::date,${userId}::uuid)`
+        }
+        const inserted=await sql`select id, commission_rate as rate, valid_from::text as "validFrom", valid_to::text as "validTo" from public.receiver_supplier_commissions where supplier_id=${supplierId}::uuid and receiver_id=${receiverId}::uuid and valid_from=${validFrom}::date limit 1`
         return res.status(201).json({ok:true,data:inserted[0]})
-      }
+
       case 'sales': {
         const sellerId = profile.role === 'seller' ? String(profile.seller_id) : requiredText('sellerId'), supplierId = requiredText('supplierId'), quantity = positiveInt('quantity'), price = Number(body.price)
         if (!sellerId || !supplierId || !quantity || !Number.isSafeInteger(price) || price < 0) return fail(res, 400, 'Données de vente invalides')
