@@ -195,7 +195,7 @@ export default async function handler(req: Req, res: Res) {
       case 'commissions': {
         if (!['super_admin','admin','sales_manager'].includes(profile.role)) return fail(res, 403, 'Votre rôle ne permet pas de configurer les commissions.')
         const supplierId=requiredText('supplierId'), receiverId=requiredText('receiverId'), rate=Number(body.rate), validFrom=requiredText('validFrom')||date
-        if(!supplierId||!receiverId||!/^\\d{4}-\\d{2}-\\d{2}$/.test(validFrom)||!Number.isFinite(rate)||rate<0||rate>100) return fail(res,400,'Fournisseur, receveur, date d’effet ou taux invalide.')
+        if(!supplierId||!receiverId||!/^\d{4}-\d{2}-\d{2}$/.test(validFrom)||!Number.isFinite(rate)||rate<0||rate>100) return fail(res,400,'Fournisseur, receveur, date d’effet ou taux invalide.')
         const refs=await sql`select s.id, r.id from public.suppliers s cross join public.receivers r where s.id=${supplierId}::uuid and r.id=${receiverId}::uuid and r.is_active=true`
         if(!refs.length) return fail(res,400,'Fournisseur ou receveur introuvable/inactif.')
         const current=await sql`select id, valid_from::text as valid_from from public.receiver_supplier_commissions where supplier_id=${supplierId}::uuid and receiver_id=${receiverId}::uuid and valid_to is null order by valid_from desc limit 1`
