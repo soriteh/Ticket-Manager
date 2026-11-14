@@ -23,6 +23,16 @@ create table if not exists public.sellers (
   created_at timestamptz not null default now()
 );
 
+-- Association facultative : un vendeur sans compte reste géré par l'administration.
+alter table public.tm_profiles add column if not exists seller_id uuid;
+do $
+begin
+  if not exists (select 1 from pg_constraint where conname = 'tm_profiles_seller_id_fkey' and conrelid = 'public.tm_profiles'::regclass) then
+    alter table public.tm_profiles add constraint tm_profiles_seller_id_fkey foreign key (seller_id) references public.sellers(id) on delete restrict;
+  end if;
+end $;
+create unique index if not exists tm_profiles_seller_id_unique on public.tm_profiles(seller_id) where seller_id is not null;
+
 create table if not exists public.ticket_types (
   id uuid primary key default gen_random_uuid(),
   name text not null unique,
@@ -69,7 +79,7 @@ create table if not exists public.sales (
   period_end date,
   status text not null default 'draft' check (status in ('draft','validated','cancelled')),
   notes text,
-  created_by text references neon_auth."user"(id),
+  created_by uuid references neon_auth."user"(id),
   created_at timestamptz not null default now(),
   check (period_end is null or period_start is null or period_end >= period_start)
 );
