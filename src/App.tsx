@@ -4,7 +4,7 @@ import { LayoutDashboard, Users, Package, Ticket, Wallet, ChartNoAxesCombined, S
 
 type Tab='dashboard'|'sellers'|'suppliers'|'receivers'|'receiver-assignments'|'receipts'|'distributions'|'sales'|'commissions'|'remittances'|'reports'|'settings'
 type Seller={id:string;name:string;phone:string;rate:number;active:boolean}
-type Distribution={id:string;sellerId:string;supplierId:string;date:string;quantity:number;price:number;status:'Validée'|'Brouillon'}
+type Distribution={id:string;sellerId:string;supplierId:string;receiverId:string|null;receiverName:string|null;date:string;quantity:number;price:number;status:'Validée'|'Brouillon'}
 type Sale={id:string;sellerId:string;supplierId:string;receiverId:string|null;receiverName:string|null;date:string;quantity:number;price:number;commissionRate:number;supplierReceiverRate:number|null;status:'Validée'|'Brouillon'}
 type Remittance={id:string;sellerId:string;date:string;amount:number;method:string;reference:string}
 type Supplier={id:string;name:string;contact:string;phone:string;email:string;address:string;taxId:string;active:boolean}
