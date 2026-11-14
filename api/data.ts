@@ -16,7 +16,7 @@ type Res = {
 const authBaseUrl = process.env.NEON_AUTH_BASE_URL || process.env.VITE_NEON_AUTH_URL
 const jwksUrl = process.env.NEON_AUTH_JWKS_URL || (authBaseUrl ? new URL('.well-known/jwks.json', authBaseUrl.endsWith('/') ? authBaseUrl : authBaseUrl + '/').toString() : '')
 const jwks = jwksUrl ? createRemoteJWKSet(new URL(jwksUrl)) : null
-const resources = new Set(['me', 'sellers', 'suppliers', 'receipts', 'distributions', 'sales', 'remittances', 'commissions', 'settings'])
+const resources = new Set(['me', 'sellers', 'suppliers', 'receivers', 'receipts', 'distributions', 'sales', 'remittances', 'commissions', 'settings'])
 
 function fail(res: Res, status: number, error: string) {
   return res.status(status).json({ ok: false, error })
@@ -63,7 +63,7 @@ export default async function handler(req: Req, res: Res) {
     const readAccess: Record<string, string[]> = {
       super_admin: [...resources],
       admin: [...resources],
-      sales_manager: ['sellers', 'suppliers', 'receipts', 'distributions', 'sales', 'commissions'],
+      sales_manager: ['sellers', 'suppliers', 'receivers', 'receipts', 'distributions', 'sales', 'commissions'],
       cashier: ['sellers', 'sales', 'remittances'],
       auditor: [...resources],
       seller: ['sellers', 'suppliers', 'distributions', 'sales', 'remittances'],
@@ -71,7 +71,7 @@ export default async function handler(req: Req, res: Res) {
     const writeAccess: Record<string, string[]> = {
       super_admin: [...resources],
       admin: [...resources],
-      sales_manager: ['sellers', 'suppliers', 'receipts', 'distributions', 'sales', 'commissions'],
+      sales_manager: ['sellers', 'suppliers', 'receivers', 'receipts', 'distributions', 'sales', 'commissions'],
       cashier: ['sales', 'remittances'],
       auditor: [],
       seller: ['sales'],
@@ -92,6 +92,9 @@ export default async function handler(req: Req, res: Res) {
         case 'suppliers':
           rows = await sql`select id, name, contact_name as contact, phone, email, address, tax_id as "taxId", is_active as active from public.suppliers where (${scopedSellerId}::uuid is null or id in (select supplier_id from public.distributions where seller_id=${scopedSellerId}::uuid and status='validated')) order by created_at desc`
           break
+        case 'receivers':
+          rows = await sql`select id, receiver_code as code, full_name as name, phone, email, address, is_active as active, (select count(*)::int from public.seller_receiver_assignments a where a.receiver_id=r.id and a.valid_to is null) as "activeSellerCount" from public.receivers r order by full_name asc`
+          break
         case 'receipts':
           rows = await sql`select id, supplier_id as "supplierId", received_at::date::text as date, quantity, unit_cost as "unitCost", reference from public.ticket_receipts where status = 'validated' order by received_at desc`
           break
@@ -99,7 +102,7 @@ export default async function handler(req: Req, res: Res) {
           rows = await sql`select d.id, d.seller_id as "sellerId", d.supplier_id as "supplierId", d.distributed_at::date::text as date, di.quantity, di.reference_unit_price as price, 'Validée' as status from public.distributions d join public.distribution_items di on di.distribution_id=d.id where d.status='validated' and (${scopedSellerId}::uuid is null or d.seller_id=${scopedSellerId}::uuid) order by d.distributed_at desc`
           break
         case 'commissions':
-          rows = await sql`select distinct on (supplier_id,seller_id) supplier_id as "supplierId", seller_id as "sellerId", commission_rate as rate, valid_from as "validFrom", valid_to as "validTo" from public.supplier_receiver_commissions where valid_from <= current_date and (valid_to is null or valid_to >= current_date) order by supplier_id,seller_id,valid_from desc`
+          rows = await sql`select c.id, c.supplier_id as "supplierId", s.name as "supplierName", c.receiver_id as "receiverId", r.full_name as "receiverName", c.commission_rate as rate, c.valid_from::text as "validFrom", c.valid_to::text as "validTo" from public.receiver_supplier_commissions c join public.suppliers s on s.id=c.supplier_id join public.receivers r on r.id=c.receiver_id order by s.name, r.full_name, c.valid_from desc`
           break
         case 'settings': {
           let configured: any[] = []
@@ -190,28 +193,22 @@ export default async function handler(req: Req, res: Res) {
         return res.status(201).json({ok:true,id:rows[0].id})
       }
       case 'commissions': {
-        if (!['super_admin','admin'].includes(profile.role)) return fail(res, 403, 'Seuls les administrateurs peuvent modifier les commissions')
-        const supplierId=requiredText('supplierId'), sellerId=requiredText('sellerId'), rate=Number(body.rate), validFrom=requiredText('validFrom')||date
-        if(!supplierId||!sellerId||!Number.isFinite(rate)||rate<0||rate>100) return fail(res,400,'Fournisseur, receveur ou taux invalide')
-        // Modifier le taux met à jour la ligne existante du couple fournisseur–receveur.
-        // Une ligne est créée uniquement lors de sa première configuration.
-        const updated=await sql`
-          update public.supplier_receiver_commissions
-          set commission_rate=${rate}, created_by=${userId}::uuid
-          where id=(
-            select id from public.supplier_receiver_commissions
-            where supplier_id=${supplierId}::uuid and seller_id=${sellerId}::uuid
-            order by (valid_to is null) desc, valid_from desc
-            limit 1
-          )
-          returning id, commission_rate as rate
-        `
-        const rows=updated.length ? updated : await sql`
-          insert into public.supplier_receiver_commissions(supplier_id,seller_id,commission_rate,valid_from,created_by)
-          values(${supplierId}::uuid,${sellerId}::uuid,${rate},${validFrom}::date,${userId}::uuid)
-          returning id, commission_rate as rate
-        `
-        return res.status(200).json({ok:true,data:rows[0]})
+        if (!['super_admin','admin','sales_manager'].includes(profile.role)) return fail(res, 403, 'Votre rôle ne permet pas de configurer les commissions.')
+        const supplierId=requiredText('supplierId'), receiverId=requiredText('receiverId'), rate=Number(body.rate), validFrom=requiredText('validFrom')||date
+        if(!supplierId||!receiverId||!/^\\d{4}-\\d{2}-\\d{2}$/.test(validFrom)||!Number.isFinite(rate)||rate<0||rate>100) return fail(res,400,'Fournisseur, receveur, date d’effet ou taux invalide.')
+        const refs=await sql`select s.id, r.id from public.suppliers s cross join public.receivers r where s.id=${supplierId}::uuid and r.id=${receiverId}::uuid and r.is_active=true`
+        if(!refs.length) return fail(res,400,'Fournisseur ou receveur introuvable/inactif.')
+        const current=await sql`select id, valid_from::text as valid_from from public.receiver_supplier_commissions where supplier_id=${supplierId}::uuid and receiver_id=${receiverId}::uuid and valid_to is null order by valid_from desc limit 1`
+        if(current.length && String(current[0].valid_from)>=validFrom){
+          if(String(current[0].valid_from)===validFrom){
+            const updated=await sql`update public.receiver_supplier_commissions set commission_rate=${rate}, created_by=${userId}::uuid where id=${current[0].id}::uuid returning id, commission_rate as rate, valid_from::text as "validFrom", valid_to::text as "validTo"`
+            return res.status(200).json({ok:true,data:updated[0]})
+          }
+          return fail(res,409,'La date d’effet doit être postérieure au dernier taux configuré pour ce couple.')
+        }
+        if(current.length) await sql`update public.receiver_supplier_commissions set valid_to=(${validFrom}::date - interval '1 day')::date where id=${current[0].id}::uuid`
+        const inserted=await sql`insert into public.receiver_supplier_commissions(supplier_id,receiver_id,commission_rate,valid_from,created_by) values(${supplierId}::uuid,${receiverId}::uuid,${rate},${validFrom}::date,${userId}::uuid) returning id, commission_rate as rate, valid_from::text as "validFrom", valid_to::text as "validTo"`
+        return res.status(201).json({ok:true,data:inserted[0]})
       }
       case 'sales': {
         const sellerId = profile.role === 'seller' ? String(profile.seller_id) : requiredText('sellerId'), supplierId = requiredText('supplierId'), quantity = positiveInt('quantity'), price = Number(body.price)
