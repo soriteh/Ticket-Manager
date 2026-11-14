@@ -105,7 +105,7 @@ export default async function handler(req: Req, res: Res) {
           rows = await sql`select d.id, d.seller_id as "sellerId", d.supplier_id as "supplierId", d.receiver_id as "receiverId", r.full_name as "receiverName", d.distributed_at::date::text as date, di.quantity, di.reference_unit_price as price, 'Validée' as status from public.distributions d join public.distribution_items di on di.distribution_id=d.id left join public.receivers r on r.id=d.receiver_id where d.status='validated' and (${scopedSellerId}::uuid is null or d.seller_id=${scopedSellerId}::uuid) order by d.distributed_at desc`
           break
         case 'commissions':
-          rows = await sql`select c.id, c.supplier_id as "supplierId", s.name as "supplierName", c.receiver_id as "receiverId", r.full_name as "receiverName", c.commission_rate as rate, c.valid_from::text as "validFrom", c.valid_to::text as "validTo" from public.receiver_supplier_commissions c join public.suppliers s on s.id=c.supplier_id join public.receivers r on r.id=c.receiver_id order by s.name, r.full_name, c.valid_from desc`
+          rows = await sql`select c.id, c.receiver_id as "receiverId", r.full_name as "receiverName", c.commission_rate as rate, c.valid_from::text as "validFrom", c.valid_to::text as "validTo" from public.receiver_commissions c join public.receivers r on r.id=c.receiver_id order by r.full_name, c.valid_from desc`
           break
         case 'settings': {
           let configured: any[] = []
@@ -114,7 +114,7 @@ export default async function handler(req: Req, res: Res) {
           break
         }
         case 'sales':
-          rows = await sql`select s.id, s.seller_id as "sellerId", s.supplier_id as "supplierId", s.receiver_id as "receiverId", r.full_name as "receiverName", s.sold_at::date::text as date, si.quantity, si.unit_price as price, si.commission_rate as "commissionRate", si.supplier_receiver_commission_rate as "supplierReceiverRate", 'Validée' as status from public.sales s join public.sale_items si on si.sale_id=s.id left join public.receivers r on r.id=s.receiver_id where s.status='validated' and (${scopedSellerId}::uuid is null or s.seller_id=${scopedSellerId}::uuid) order by s.sold_at desc`
+          rows = await sql`select s.id, s.seller_id as "sellerId", s.supplier_id as "supplierId", s.receiver_id as "receiverId", r.full_name as "receiverName", s.sold_at::date::text as date, si.quantity, si.unit_price as price, si.commission_rate as "commissionRate", si.supplier_receiver_commission_rate as "supplierReceiverRate", si.receiver_commission_rate as "receiverCommissionRate", 'Validée' as status from public.sales s join public.sale_items si on si.sale_id=s.id left join public.receivers r on r.id=s.receiver_id where s.status='validated' and (${scopedSellerId}::uuid is null or s.seller_id=${scopedSellerId}::uuid) order by s.sold_at desc`
           break
         default:
           rows = await sql`select id, seller_id as "sellerId", paid_at::date::text as date, amount, payment_method as method, transaction_reference as reference from public.remittances where (${scopedSellerId}::uuid is null or seller_id=${scopedSellerId}::uuid) order by paid_at desc`
@@ -233,28 +233,28 @@ export default async function handler(req: Req, res: Res) {
       }
       case 'commissions': {
         if (!['super_admin','admin','sales_manager'].includes(profile.role)) return fail(res, 403, 'Votre rôle ne permet pas de configurer les commissions.')
-        const supplierId=requiredText('supplierId'), receiverId=requiredText('receiverId'), rate=Number(body.rate), validFrom=requiredText('validFrom')||date
-        if(!supplierId||!receiverId||!/^\d{4}-\d{2}-\d{2}$/.test(validFrom)||!Number.isFinite(rate)||rate<0||rate>100) return fail(res,400,'Fournisseur, receveur, date d’effet ou taux invalide.')
-        const refs=await sql`select s.id, r.id from public.suppliers s cross join public.receivers r where s.id=${supplierId}::uuid and r.id=${receiverId}::uuid and r.is_active=true`
-        if(!refs.length) return fail(res,400,'Fournisseur ou receveur introuvable/inactif.')
-        const current=await sql`select id, valid_from::text as valid_from from public.receiver_supplier_commissions where supplier_id=${supplierId}::uuid and receiver_id=${receiverId}::uuid and valid_to is null order by valid_from desc limit 1`
+        const receiverId=requiredText('receiverId'), rate=Number(body.rate), validFrom=requiredText('validFrom')||date
+        if(!receiverId||!/^\\d{4}-\\d{2}-\\d{2}$/.test(validFrom)||!Number.isFinite(rate)||rate<0||rate>100) return fail(res,400,'Receveur, date d’effet ou taux invalide.')
+        const refs=await sql`select id from public.receivers where id=${receiverId}::uuid and is_active=true`
+        if(!refs.length) return fail(res,400,'Receveur introuvable ou inactif.')
+        const current=await sql`select id, valid_from::text as valid_from from public.receiver_commissions where receiver_id=${receiverId}::uuid and valid_to is null order by valid_from desc limit 1`
         if(current.length && String(current[0].valid_from)>=validFrom){
           if(String(current[0].valid_from)===validFrom){
-            const updated=await sql`update public.receiver_supplier_commissions set commission_rate=${rate}, created_by=${userId}::uuid where id=${current[0].id}::uuid returning id, commission_rate as rate, valid_from::text as "validFrom", valid_to::text as "validTo"`
+            const updated=await sql`update public.receiver_commissions set commission_rate=${rate}, created_by=${userId}::uuid where id=${current[0].id}::uuid returning id, receiver_id as "receiverId", commission_rate as rate, valid_from::text as "validFrom", valid_to::text as "validTo"`
             return res.status(200).json({ok:true,data:updated[0]})
           }
-          return fail(res,409,'La date d’effet doit être postérieure au dernier taux configuré pour ce couple.')
+          return fail(res,409,'La date d’effet doit être postérieure au dernier taux configuré pour ce receveur.')
         }
         if(current.length){
-          const closeCurrent = sql`update public.receiver_supplier_commissions set valid_to=(${validFrom}::date - interval '1 day')::date where id=${current[0].id}::uuid`
-          const insertCurrent = sql`insert into public.receiver_supplier_commissions(supplier_id,receiver_id,commission_rate,valid_from,created_by) values(${supplierId}::uuid,${receiverId}::uuid,${rate},${validFrom}::date,${userId}::uuid)`
-          await sql.transaction([closeCurrent,insertCurrent])
+          await sql.transaction([
+            sql`update public.receiver_commissions set valid_to=(${validFrom}::date - interval '1 day')::date where id=${current[0].id}::uuid`,
+            sql`insert into public.receiver_commissions(receiver_id,commission_rate,valid_from,created_by) values(${receiverId}::uuid,${rate},${validFrom}::date,${userId}::uuid)`
+          ])
         }else{
-          await sql`insert into public.receiver_supplier_commissions(supplier_id,receiver_id,commission_rate,valid_from,created_by) values(${supplierId}::uuid,${receiverId}::uuid,${rate},${validFrom}::date,${userId}::uuid)`
+          await sql`insert into public.receiver_commissions(receiver_id,commission_rate,valid_from,created_by) values(${receiverId}::uuid,${rate},${validFrom}::date,${userId}::uuid)`
         }
-        const inserted=await sql`select id, commission_rate as rate, valid_from::text as "validFrom", valid_to::text as "validTo" from public.receiver_supplier_commissions where supplier_id=${supplierId}::uuid and receiver_id=${receiverId}::uuid and valid_from=${validFrom}::date limit 1`
+        const inserted=await sql`select id, receiver_id as "receiverId", commission_rate as rate, valid_from::text as "validFrom", valid_to::text as "validTo" from public.receiver_commissions where receiver_id=${receiverId}::uuid and valid_from=${validFrom}::date limit 1`
         return res.status(201).json({ok:true,data:inserted[0]})
-
       }
       case 'sales': {
         const sellerId = profile.role === 'seller' ? String(profile.seller_id) : requiredText('sellerId'), supplierId = requiredText('supplierId'), quantity = positiveInt('quantity'), price = Number(body.price)
@@ -267,8 +267,9 @@ export default async function handler(req: Req, res: Res) {
         const assignmentRows = await sql`select receiver_id from public.seller_receiver_assignments where seller_id=${sellerId}::uuid and valid_from<=${date}::date and (valid_to is null or valid_to>=${date}::date) order by valid_from desc limit 2`
         if (assignmentRows.length !== 1) return fail(res, 409, 'Affectez exactement un receveur à ce vendeur pour la date de vente avant de déclarer une vente.')
         const receiverId = String(assignmentRows[0].receiver_id)
-        const supplierRateRows = receiverId ? await sql`select commission_rate from public.receiver_supplier_commissions where supplier_id=${supplierId}::uuid and receiver_id=${receiverId}::uuid and valid_from<=${date}::date and (valid_to is null or valid_to>=${date}::date) order by valid_from desc limit 1` : []
-        const supplierReceiverRate = supplierRateRows.length ? Number(supplierRateRows[0].commission_rate) : null
+        const receiverRateRows = await sql`select commission_rate from public.receiver_commissions where receiver_id=${receiverId}::uuid and valid_from<=${date}::date and (valid_to is null or valid_to>=${date}::date) order by valid_from desc limit 1`
+        if (!receiverRateRows.length) return fail(res, 409, 'Configurez un taux de commission pour ce receveur à la date de vente avant de continuer.')
+        const receiverCommissionRate = Number(receiverRateRows[0].commission_rate)
         const ref = 'VTE-' + crypto.randomUUID().slice(0, 8).toUpperCase()
         const rows = await sql`
           with locked_pair as materialized (
@@ -286,8 +287,8 @@ export default async function handler(req: Req, res: Res) {
             select ${ref},${sellerId}::uuid,${supplierId}::uuid,${receiverId}::uuid,${date}::date,'validated',${userId}
             from available where qty >= ${quantity} returning id
           ), item as (
-            insert into public.sale_items(sale_id,ticket_type_id,quantity,unit_price,commission_rate,supplier_receiver_commission_rate)
-            select created.id,${ticketTypes[0].id}::uuid,${quantity},${price},${Number(rateRows[0].commission_rate)},${supplierReceiverRate} from created returning sale_id
+            insert into public.sale_items(sale_id,ticket_type_id,quantity,unit_price,commission_rate,supplier_receiver_commission_rate,receiver_commission_rate)
+            select created.id,${ticketTypes[0].id}::uuid,${quantity},${price},${Number(rateRows[0].commission_rate)},null,${receiverCommissionRate} from created returning sale_id
           )
           select sale_id as id from item
         `
