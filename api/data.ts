@@ -16,7 +16,7 @@ type Res = {
 const authBaseUrl = process.env.NEON_AUTH_BASE_URL || process.env.VITE_NEON_AUTH_URL
 const jwksUrl = process.env.NEON_AUTH_JWKS_URL || (authBaseUrl ? new URL('.well-known/jwks.json', authBaseUrl.endsWith('/') ? authBaseUrl : authBaseUrl + '/').toString() : '')
 const jwks = jwksUrl ? createRemoteJWKSet(new URL(jwksUrl)) : null
-const resources = new Set(['me', 'sellers', 'suppliers', 'receivers', 'receipts', 'distributions', 'sales', 'remittances', 'commissions', 'settings'])
+const resources = new Set(['me', 'sellers', 'suppliers', 'receivers', 'receiver-assignments', 'receipts', 'distributions', 'sales', 'remittances', 'commissions', 'settings'])
 
 function fail(res: Res, status: number, error: string) {
   return res.status(status).json({ ok: false, error })
@@ -63,7 +63,7 @@ export default async function handler(req: Req, res: Res) {
     const readAccess: Record<string, string[]> = {
       super_admin: [...resources],
       admin: [...resources],
-      sales_manager: ['sellers', 'suppliers', 'receivers', 'receipts', 'distributions', 'sales', 'commissions'],
+      sales_manager: ['sellers', 'suppliers', 'receivers', 'receiver-assignments', 'receipts', 'distributions', 'sales', 'commissions'],
       cashier: ['sellers', 'sales', 'remittances'],
       auditor: [...resources],
       seller: ['sellers', 'suppliers', 'distributions', 'sales', 'remittances'],
@@ -94,6 +94,9 @@ export default async function handler(req: Req, res: Res) {
           break
         case 'receivers':
           rows = await sql`select id, receiver_code as code, full_name as name, phone, email, address, is_active as active, (select count(*)::int from public.seller_receiver_assignments a where a.receiver_id=r.id and a.valid_to is null) as "activeSellerCount" from public.receivers r order by full_name asc`
+          break
+        case 'receiver-assignments':
+          rows = await sql`select a.id, a.seller_id as "sellerId", s.full_name as "sellerName", a.receiver_id as "receiverId", r.full_name as "receiverName", a.valid_from::text as "validFrom", a.valid_to::text as "validTo" from public.seller_receiver_assignments a join public.sellers s on s.id=a.seller_id join public.receivers r on r.id=a.receiver_id order by a.valid_from desc, s.full_name`
           break
         case 'receipts':
           rows = await sql`select id, supplier_id as "supplierId", received_at::date::text as date, quantity, unit_cost as "unitCost", reference from public.ticket_receipts where status = 'validated' order by received_at desc`
@@ -143,6 +146,32 @@ export default async function handler(req: Req, res: Res) {
         if (!Number.isFinite(defaultRate) || defaultRate < 0 || defaultRate > 100) return fail(res,400,'Taux de commission invalide.')
         const rows = await sql`insert into public.tm_app_settings (id,app_name,organization_name,support_email,support_phone,timezone,ticket_name,ticket_price,default_commission_rate,updated_by,updated_at) values (true,${appName},${organizationName},${supportEmail},${supportPhone},${timezone},${ticketName},${ticketPrice},${defaultRate},${userId}::uuid,now()) on conflict (id) do update set app_name=excluded.app_name,organization_name=excluded.organization_name,support_email=excluded.support_email,support_phone=excluded.support_phone,timezone=excluded.timezone,ticket_name=excluded.ticket_name,ticket_price=excluded.ticket_price,default_commission_rate=excluded.default_commission_rate,updated_by=excluded.updated_by,updated_at=now() returning app_name as "appName",organization_name as "organizationName",support_email as "supportEmail",support_phone as "supportPhone",timezone,ticket_name as "ticketName",ticket_price as "ticketPrice",default_commission_rate as "defaultCommissionRate"`
         return res.status(200).json({ok:true,data:rows[0]})
+      }
+      case 'receivers': {
+        const receiverId=requiredText('receiverId')
+        if(receiverId){
+          const active=body.active
+          if(typeof active!=='boolean') return fail(res,400,'Statut du receveur invalide.')
+          const updated=await sql`update public.receivers set is_active=${active}, updated_at=now() where id=${receiverId}::uuid returning id`
+          if(!updated.length)return fail(res,404,'Receveur introuvable.')
+          return res.status(200).json({ok:true,id:updated[0].id})
+        }
+        const name=requiredText('name')
+        if(!name)return fail(res,400,'Nom complet du receveur obligatoire.')
+        const result=await sql`insert into public.receivers(receiver_code,full_name,phone,email,address,notes) values(${'REC-'+crypto.randomUUID().slice(0,8).toUpperCase()},${name},${requiredText('phone')||null},${requiredText('email')||null},${requiredText('address')||null},${requiredText('notes')||null}) returning id, receiver_code as code`
+        return res.status(201).json({ok:true,...result[0]})
+      }
+      case 'receiver-assignments': {
+        const sellerId=requiredText('sellerId'),receiverId=requiredText('receiverId'),validFrom=requiredText('validFrom')
+        if(!sellerId||!receiverId||!/^\d{4}-\d{2}-\d{2}$/.test(validFrom))return fail(res,400,'Vendeur, receveur et date d’affectation obligatoires.')
+        const refs=await sql`select s.id,r.id from public.sellers s cross join public.receivers r where s.id=${sellerId}::uuid and s.is_active=true and r.id=${receiverId}::uuid and r.is_active=true`
+        if(!refs.length)return fail(res,400,'Vendeur ou receveur introuvable/inactif.')
+        const conflicts=await sql`select id from public.seller_receiver_assignments where seller_id=${sellerId}::uuid and valid_from>=${validFrom}::date limit 1`
+        if(conflicts.length)return fail(res,409,'Une affectation existe déjà à cette date ou après. Vérifiez l’historique avant de continuer.')
+        const current=await sql`select id,valid_from::text as valid_from from public.seller_receiver_assignments where seller_id=${sellerId}::uuid and valid_to is null order by valid_from desc limit 1`
+        if(current.length&&String(current[0].valid_from)>=validFrom)return fail(res,409,'La nouvelle affectation doit commencer après la date de début de l’affectation actuelle.')
+        const rows=await sql`with locked_seller as materialized (select id from public.sellers where id=${sellerId}::uuid for update), closed as (update public.seller_receiver_assignments set valid_to=(${validFrom}::date-interval '1 day')::date where seller_id in (select id from locked_seller) and valid_to is null returning id), inserted as (insert into public.seller_receiver_assignments(seller_id,receiver_id,valid_from,created_by) select ${sellerId}::uuid,${receiverId}::uuid,${validFrom}::date,${userId}::uuid from locked_seller returning id) select id from inserted`
+        return res.status(201).json({ok:true,id:rows[0]?.id})
       }
       case 'sellers': {
         const name = requiredText('name')
