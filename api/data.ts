@@ -111,7 +111,7 @@ export default async function handler(req: Req, res: Res) {
           break
         }
         case 'sales':
-          rows = await sql`select s.id, s.seller_id as "sellerId", s.supplier_id as "supplierId", s.sold_at::date::text as date, si.quantity, si.unit_price as price, si.commission_rate as "commissionRate", si.supplier_receiver_commission_rate as "supplierReceiverRate", 'Validée' as status from public.sales s join public.sale_items si on si.sale_id=s.id where s.status='validated' and (${scopedSellerId}::uuid is null or s.seller_id=${scopedSellerId}::uuid) order by s.sold_at desc`
+          rows = await sql`select s.id, s.seller_id as "sellerId", s.supplier_id as "supplierId", s.receiver_id as "receiverId", r.full_name as "receiverName", s.sold_at::date::text as date, si.quantity, si.unit_price as price, si.commission_rate as "commissionRate", si.supplier_receiver_commission_rate as "supplierReceiverRate", 'Validée' as status from public.sales s join public.sale_items si on si.sale_id=s.id left join public.receivers r on r.id=s.receiver_id where s.status='validated' and (${scopedSellerId}::uuid is null or s.seller_id=${scopedSellerId}::uuid) order by s.sold_at desc`
           break
         default:
           rows = await sql`select id, seller_id as "sellerId", paid_at::date::text as date, amount, payment_method as method, transaction_reference as reference from public.remittances where (${scopedSellerId}::uuid is null or seller_id=${scopedSellerId}::uuid) order by paid_at desc`
@@ -218,7 +218,10 @@ export default async function handler(req: Req, res: Res) {
         const ticketTypes = await sql`insert into public.ticket_types (name) values (${configuredTicketName}) on conflict (name) do update set name=excluded.name returning id`
         const rateRows = await sql`select commission_rate from public.sellers where id=${sellerId}::uuid and is_active=true`
         if (!rateRows.length) return fail(res, 400, 'Vendeur introuvable ou inactif')
-        const supplierRateRows = await sql`select commission_rate from public.supplier_receiver_commissions where supplier_id=${supplierId}::uuid and seller_id=${sellerId}::uuid and valid_from<=${date}::date and (valid_to is null or valid_to>=${date}::date) order by valid_from desc limit 1`
+        const assignmentRows = await sql`select receiver_id from public.seller_receiver_assignments where seller_id=${sellerId}::uuid and valid_from<=${date}::date and (valid_to is null or valid_to>=${date}::date) order by valid_from desc limit 2`
+        if (assignmentRows.length > 1) return fail(res, 409, 'Plusieurs affectations receveur couvrent la date de vente. Corrigez l’historique avant de vendre.')
+        const receiverId = assignmentRows.length ? String(assignmentRows[0].receiver_id) : null
+        const supplierRateRows = receiverId ? await sql`select commission_rate from public.receiver_supplier_commissions where supplier_id=${supplierId}::uuid and receiver_id=${receiverId}::uuid and valid_from<=${date}::date and (valid_to is null or valid_to>=${date}::date) order by valid_from desc limit 1` : []
         const supplierReceiverRate = supplierRateRows.length ? Number(supplierRateRows[0].commission_rate) : null
         const ref = 'VTE-' + crypto.randomUUID().slice(0, 8).toUpperCase()
         const rows = await sql`
@@ -233,8 +236,8 @@ export default async function handler(req: Req, res: Res) {
               - coalesce((select sum(si.quantity) from public.sales s join public.sale_items si on si.sale_id=s.id where s.seller_id=${sellerId}::uuid and s.supplier_id=${supplierId}::uuid and s.status='validated'),0) as qty
             from locked_pair
           ), created as (
-            insert into public.sales(reference,seller_id,supplier_id,sold_at,status,created_by)
-            select ${ref},${sellerId}::uuid,${supplierId}::uuid,${date}::date,'validated',${userId}
+            insert into public.sales(reference,seller_id,supplier_id,receiver_id,sold_at,status,created_by)
+            select ${ref},${sellerId}::uuid,${supplierId}::uuid,${receiverId}::uuid,${date}::date,'validated',${userId}
             from available where qty >= ${quantity} returning id
           ), item as (
             insert into public.sale_items(sale_id,ticket_type_id,quantity,unit_price,commission_rate,supplier_receiver_commission_rate)
