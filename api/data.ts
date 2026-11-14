@@ -71,7 +71,7 @@ export default async function handler(req: Req, res: Res) {
     const writeAccess: Record<string, string[]> = {
       super_admin: [...resources],
       admin: [...resources],
-      sales_manager: ['sellers', 'suppliers', 'receivers', 'receipts', 'distributions', 'sales', 'commissions'],
+      sales_manager: ['sellers', 'suppliers', 'receivers', 'receiver-assignments', 'receipts', 'distributions', 'sales', 'commissions'],
       cashier: ['sales', 'remittances'],
       auditor: [],
       seller: ['sales'],
@@ -152,6 +152,7 @@ export default async function handler(req: Req, res: Res) {
         if(receiverId){
           const active=body.active
           if(typeof active!=='boolean') return fail(res,400,'Statut du receveur invalide.')
+          if(!active){const assigned=await sql`select id from public.seller_receiver_assignments where receiver_id=${receiverId}::uuid and valid_to is null limit 1`;if(assigned.length)return fail(res,409,'Ce receveur a encore des vendeurs actifs. Réaffectez-les avant de le désactiver.')}
           const updated=await sql`update public.receivers set is_active=${active}, updated_at=now() where id=${receiverId}::uuid returning id`
           if(!updated.length)return fail(res,404,'Receveur introuvable.')
           return res.status(200).json({ok:true,id:updated[0].id})
@@ -166,6 +167,8 @@ export default async function handler(req: Req, res: Res) {
         if(!sellerId||!receiverId||!/^\d{4}-\d{2}-\d{2}$/.test(validFrom))return fail(res,400,'Vendeur, receveur et date d’affectation obligatoires.')
         const refs=await sql`select s.id,r.id from public.sellers s cross join public.receivers r where s.id=${sellerId}::uuid and s.is_active=true and r.id=${receiverId}::uuid and r.is_active=true`
         if(!refs.length)return fail(res,400,'Vendeur ou receveur introuvable/inactif.')
+        const overlaps=await sql`select id from public.seller_receiver_assignments where seller_id=${sellerId}::uuid and valid_from<=${validFrom}::date and (valid_to is null or valid_to>=${validFrom}::date) limit 1`
+        if(overlaps.length)return fail(res,409,'Une affectation couvre déjà cette date. Choisissez une date après la fin de l’affectation existante.')
         const conflicts=await sql`select id from public.seller_receiver_assignments where seller_id=${sellerId}::uuid and valid_from>=${validFrom}::date limit 1`
         if(conflicts.length)return fail(res,409,'Une affectation existe déjà à cette date ou après. Vérifiez l’historique avant de continuer.')
         const current=await sql`select id,valid_from::text as valid_from from public.seller_receiver_assignments where seller_id=${sellerId}::uuid and valid_to is null order by valid_from desc limit 1`
@@ -197,6 +200,9 @@ export default async function handler(req: Req, res: Res) {
       case 'distributions': {
         const sellerId = requiredText('sellerId'), supplierId = requiredText('supplierId'), quantity = positiveInt('quantity'), price = Number(body.price)
         if (!sellerId || !supplierId || !quantity || !Number.isSafeInteger(price) || price < 0) return fail(res, 400, 'Données de distribution invalides')
+        const assignmentRows=await sql`select receiver_id from public.seller_receiver_assignments where seller_id=${sellerId}::uuid and valid_from<=${date}::date and (valid_to is null or valid_to>=${date}::date) order by valid_from desc limit 2`
+        if(assignmentRows.length!==1)return fail(res,409,'Affectez exactement un receveur à ce vendeur pour la date de distribution avant de continuer.')
+        const receiverId=String(assignmentRows[0].receiver_id)
         let configuredTicketName = 'Ticket standard'
         try { const configuredName = await sql`select ticket_name from public.tm_app_settings where id=true limit 1`; if (configuredName[0]?.ticket_name) configuredTicketName = String(configuredName[0].ticket_name) } catch { /* paramètres non migrés : conserver le type standard historique */ }
         const ticketTypes = await sql`insert into public.ticket_types (name) values (${configuredTicketName}) on conflict (name) do update set name=excluded.name returning id`
@@ -209,8 +215,8 @@ export default async function handler(req: Req, res: Res) {
               - coalesce((select sum(di.quantity) from public.distributions d join public.distribution_items di on di.distribution_id=d.id where d.supplier_id=${supplierId}::uuid and d.status='validated'),0) as qty
             from locked_supplier
           ), created as (
-            insert into public.distributions(reference,seller_id,supplier_id,distributed_at,status,created_by)
-            select ${ref},${sellerId}::uuid,${supplierId}::uuid,${date}::date,'validated',${userId}::uuid
+            insert into public.distributions(reference,seller_id,supplier_id,receiver_id,distributed_at,status,created_by)
+            select ${ref},${sellerId}::uuid,${supplierId}::uuid,${receiverId}::uuid,${date}::date,'validated',${userId}::uuid
             from available where qty >= ${quantity} returning id
           ), item as (
             insert into public.distribution_items(distribution_id,ticket_type_id,quantity,reference_unit_price)
@@ -248,8 +254,8 @@ export default async function handler(req: Req, res: Res) {
         const rateRows = await sql`select commission_rate from public.sellers where id=${sellerId}::uuid and is_active=true`
         if (!rateRows.length) return fail(res, 400, 'Vendeur introuvable ou inactif')
         const assignmentRows = await sql`select receiver_id from public.seller_receiver_assignments where seller_id=${sellerId}::uuid and valid_from<=${date}::date and (valid_to is null or valid_to>=${date}::date) order by valid_from desc limit 2`
-        if (assignmentRows.length > 1) return fail(res, 409, 'Plusieurs affectations receveur couvrent la date de vente. Corrigez l’historique avant de vendre.')
-        const receiverId = assignmentRows.length ? String(assignmentRows[0].receiver_id) : null
+        if (assignmentRows.length !== 1) return fail(res, 409, 'Affectez exactement un receveur à ce vendeur pour la date de vente avant de déclarer une vente.')
+        const receiverId = String(assignmentRows[0].receiver_id)
         const supplierRateRows = receiverId ? await sql`select commission_rate from public.receiver_supplier_commissions where supplier_id=${supplierId}::uuid and receiver_id=${receiverId}::uuid and valid_from<=${date}::date and (valid_to is null or valid_to>=${date}::date) order by valid_from desc limit 1` : []
         const supplierReceiverRate = supplierRateRows.length ? Number(supplierRateRows[0].commission_rate) : null
         const ref = 'VTE-' + crypto.randomUUID().slice(0, 8).toUpperCase()
