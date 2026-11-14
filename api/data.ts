@@ -193,16 +193,22 @@ export default async function handler(req: Req, res: Res) {
         if (!['super_admin','admin'].includes(profile.role)) return fail(res, 403, 'Seuls les administrateurs peuvent modifier les commissions')
         const supplierId=requiredText('supplierId'), sellerId=requiredText('sellerId'), rate=Number(body.rate), validFrom=requiredText('validFrom')||date
         if(!supplierId||!sellerId||!Number.isFinite(rate)||rate<0||rate>100) return fail(res,400,'Fournisseur, receveur ou taux invalide')
-        await sql`
+        // Modifier le taux met à jour la ligne existante du couple fournisseur–receveur.
+        // Une ligne est créée uniquement lors de sa première configuration.
+        const updated=await sql`
           update public.supplier_receiver_commissions
-          set valid_to=(${validFrom}::date - 1)
-          where supplier_id=${supplierId}::uuid and seller_id=${sellerId}::uuid and valid_from < ${validFrom}::date and (valid_to is null or valid_to >= ${validFrom}::date)
+          set commission_rate=${rate}, created_by=${userId}::uuid
+          where id=(
+            select id from public.supplier_receiver_commissions
+            where supplier_id=${supplierId}::uuid and seller_id=${sellerId}::uuid
+            order by (valid_to is null) desc, valid_from desc
+            limit 1
+          )
+          returning id, commission_rate as rate
         `
-        const rows=await sql`
+        const rows=updated.length ? updated : await sql`
           insert into public.supplier_receiver_commissions(supplier_id,seller_id,commission_rate,valid_from,created_by)
           values(${supplierId}::uuid,${sellerId}::uuid,${rate},${validFrom}::date,${userId}::uuid)
-          on conflict(supplier_id,seller_id,valid_from)
-          do update set commission_rate=excluded.commission_rate,created_by=excluded.created_by
           returning id, commission_rate as rate
         `
         return res.status(200).json({ok:true,data:rows[0]})
